@@ -20,18 +20,75 @@ class Master():
 	def draw(self, canvas, x, y, graphic, tag):
 		canvas.create_image(x, y, image = graphic, anchor = SW, tag = tag)
 
-class Objects():
-	def wait_time(self, fire_time, wait_time):
-		if time.clock() > fire_time + wait_time:
-			return True
+class Level(Master):
+	def __init__(self):
+		super(Level, self).__init__()
+		
+	def load_level(self, level):
+		if level == "one":
+			self.level_one_aliens()
+		if level == "two":
+			self.level_two_aliens()
 
-	def move(self, x, y, dx, dy):
-		x += dx
-		y += dy
+	def level_one_aliens(self):
+		self.level_one_xy = []
+		columns = 12
+		rows = 5
+		xborder = 25
+		yborder = 50
+		xspacing = self.screen_width / 20
+		yspacing = xspacing
+
+		self.add_rows_columns(self.level_one_xy, columns, rows, xborder, yborder, xspacing, yspacing)
+
+	def level_two_aliens(self):
+		self.level_two_xy_group1 = []
+		columns = 6
+		rows = 3
+		xborder = 25
+		yborder = 50
+		xspacing = self.screen_width / 20
+		yspacing = xspacing + 40
+
+		self.add_rows_columns(self.level_two_xy_group1, columns, rows, xborder, yborder, xspacing, yspacing)
+
+		self.level_two_xy_group2 = []
+		columns = 6
+		rows = 3
+		xborder = self.screen_width - 25
+		yborder = 50
+		spacing = self.screen_width / 20
+
+		self.add_rows_columns(self.level_two_xy_group2, columns, rows, xborder, yborder, xspacing, yspacing)
+
+	def add_rows_columns(self, end_list, columns, rows, xborder, yborder, xspacing, yspacing):
+		index = 1
+		while index <= rows:
+			y_val = (index - 1) * yspacing + yborder
+			for i in range(columns - 1):
+				x_val = i * xspacing + xborder
+				add = x_val, y_val
+				end_list.append(add)
+			index += 1
+		return end_list
 
 class Game(Master):
 	def __init__(self):
 		super(Game, self).__init__()
+
+		self.sleepTime = 5
+		self.lives = 3
+
+		self.update_list = []
+		self.to_delete = []
+
+		self.isStopped = True
+
+		self.level = Level()
+		self.current_level = "one"
+		self.load_screen()
+
+	def load_screen(self):
 		w = Tk()
 
 		self.background = '/Users/carollin/dev/space_invaders/graphics/background.png'
@@ -43,22 +100,14 @@ class Game(Master):
 		self.backgroundimage = self.image_convert(self.background, self.screen_width, self.screen_height)
 		self.canvas.create_image(0, 0, image = self.backgroundimage, anchor = NW)
 
-		self.sleepTime = 5
-		self.lives = 3
-
-		self.update_list = []
-		self.to_delete = []
-
-		self.isStopped = True
-
-		self.start()
+		self.start(self.current_level)
 
 		w.mainloop()
 
-	def start(self):
+	def start(self, current_level):
 		self.isStopped = False
 		self.create_dude()
-		self.create_aliens()
+		self.create_level(current_level)
 		self.mainloop()
 
 	def create_dude(self):
@@ -66,33 +115,27 @@ class Game(Master):
 		self.dude.shoot += self.create_lasers
 		self.update_list.append(self.dude)
 
-	def create_aliens(self):
-		columns = 12
-		rows = 5
-		xborder = 15
-		yborder = 50
-		spacing = self.screen_width / 20
-		index = 1
-		# getting 5 rows of aliens
-		while index % (rows + 1) != 0:
-			y_val = (index - 1) * spacing + yborder
-			# getting 12 columns of alines
-			for i in range(columns - 1):
-				x_val = i * spacing + xborder
-				a = AlienTypeOne(x_val, y_val)
-				a.shoot += self.create_lasers
-				self.update_list.append(a)
-			index += 1
+	def create_level(self, current_level):
+		self.create_aliens(current_level)
+		# self.create_barriers(self, current_level)
+
+	def create_aliens(self, current_level):
+		xy_list = self.level.load_level(current_level)
+		for i in xy_list:
+			x = i[0]
+			y = i[1]
+			a = AlienTypeOne(x, y)
+			a.shoot += self.create_lasers
+			self.update_list.append(a)
 
 	def create_lasers(self, x, y, origin):
 		l = Laser(x, y, origin)
 		l.remove += self.remove_object
+		l.hit += self.remove_object
 		self.update_list.append(l)
 
 	def remove_object(self, obj):
 		self.update_list.remove(obj)
-		self.check_lives(obj)
-		self.check_if_win()
 
 	def check_if_win(self):
 		aliens_remaining = 0
@@ -102,8 +145,8 @@ class Game(Master):
 		if aliens_remaining == 0:
 			self.canvas.create_text(self.screen_width / 2, self.screen_height / 2, fill = "yellow", text = "YOU WIN! w00t!")
 
-	def check_lives(self, obj):
-		if type(obj) is Dude:
+	def check_lives(self, obj2):
+		if obj2.tag == "dude":
 			self.lives -= 1
 			if self.lives > 0:
 				self.create_dude()
@@ -128,10 +171,9 @@ class Game(Master):
 	def update_model(self):
 		copy = self.update_list[:]
 		for obj in copy:
-			if obj in self.update_list:
-				obj.update(copy)
+			obj.update(copy)
 
-class Dude(Master, Objects):
+class Dude(Master):
 	def __init__(self, canvas):
 		super(Dude, self).__init__()
 
@@ -157,13 +199,15 @@ class Dude(Master, Objects):
 		self.c.bind("<KeyRelease-d>", self.reset_movement)
 		self.c.pack()
 
-		self.shot_wait = 0.5
+		self.wait_time = 0.5
 		self.time_fired = 0
 
 		# event handlers
 		self.shoot = EventHook()
+		self.shoot_pause = EventHook()
 
 	# movement functions	
+
 	def left(self, event):
 		self.dx = self.movement_speed * -1
 
@@ -173,30 +217,32 @@ class Dude(Master, Objects):
 	def reset_movement(self, event):
 		self.dx = 0
 
-	def movement(self):
-		self.infinite_sides()
-		self.move(self.x, self.y, self.dx, self.dy)
-
-	def infinite_sides(self):
+	def move(self):
+		# infinite moving left and right
 		if self.x > self.screen_width:
 			self.x = 5
 		if self.x < 0:
 			self.x = self.screen_width - 5
 
+		self.x += self.dx
+
 	# shooting functions
 
 	def shoot(self, event):
-		if self.check_time(self.time_fired, self.shot_wait) is True:
+		if self.check_time() is True:
 			mid_x = self.x + (self.width / 2)
 			top_y = self.y - self.height
 			self.shoot.fire(mid_x, top_y, "dude")
 			self.time_fired = time.clock()
 
 	def update(self, master_list):
-		self.movement()
+		self.move()
 
+	def check_time(self):
+		if time.clock() > self.time_fired + self.wait_time:
+			return True
 
-class AlienTypeOne(Master, Objects):
+class AlienTypeOne(Master):
 	def __init__(self, x, y):
 		super(AlienTypeOne, self).__init__()
 
@@ -210,14 +256,13 @@ class AlienTypeOne(Master, Objects):
 		self.tag = "alien"
 		self.horizontal_jump = 20
 		self.vertical_jump = 20
-
-		self.move_wait = 1
-		self.shot_wait = 500
-		self.time_moved = 0
+		self.wait_time = 1
 
 		self.movement_list = []
 
 		self.create_movement_pattern()
+
+		self.time_between_shots = 500
 
 		self.graphic = self.image_convert(self.source, self.width, self.height)
 
@@ -261,18 +306,24 @@ class AlienTypeOne(Master, Objects):
 		else: 
 			self.down()
 
-	def movement(self):
-		if self.wait_time(self.time_moved, self.move_wait) is True:
+	def move(self):
+		if self.check_wait_time() == "go":
 			self.determine_move()
 
-			self.move(self.x, self.y, self.dx, self.dy)
+			self.x += self.dx
+			self.y += self.dy
 
 			self.shift_moves()
-			self.time_moved = time.clock()
+			self.wait_time = 0
 
 	def shift_moves(self):
 		self.movement_list.append(self.movement_list[0])
 		self.movement_list.pop(0)
+
+	def check_wait_time(self):
+		self.wait_time += 1
+		if self.wait_time == 20:
+			return "go"
 
 	# shooting functions
 
@@ -282,14 +333,14 @@ class AlienTypeOne(Master, Objects):
 			self.shoot.fire(mid_x, self.y, "alien")
 
 	def randomize(self):
-		if random.randrange(self.shot_wait) == 1:
+		if random.randrange(self.time_between_shots) == 1:
 			return "go"
 
 	def update(self, master_list):
-		self.movement()
+		self.move()
 		self.attempt_shot()
 
-class Laser(Master, Objects):
+class Laser(Master):
 	def __init__(self, x, y, origin):
 		super(Laser, self).__init__()
 
@@ -307,6 +358,7 @@ class Laser(Master, Objects):
 
 		# event handlers
 		self.remove = EventHook()
+		self.hit = EventHook()
 		
 	def determine_type(self, origin):
 		if origin == "dude":
@@ -317,6 +369,10 @@ class Laser(Master, Objects):
 			self.dy = self.movement_speed * 1
 			self.graphic = self.image_convert(self.aliensource, self.width, self.height)
 			self.tag = "alien"
+
+	def move(self):
+		self.x += self.dx
+		self.y += self.dy
 
 	def x_test(self, obj):
 		if self.x + self.width >= obj.x and self.x <= obj.x + obj.width:
@@ -337,15 +393,15 @@ class Laser(Master, Objects):
 	def check_boundaries(self, obj):
 		if self.tag != obj.tag:
 			if self.x_test(obj) is True and self.y_test(obj) is True:
-				self.remove.fire(self)
-				self.remove.fire(obj)
+				self.hit.fire(self)
+				self.hit.fire(obj)
 
 	def check_if_active(self):
 		if self.y > self.screen_height or self.y < 0:
 			self.remove.fire(self)
 
 	def update(self, master_list):
-		self.move(self.x, self.y, self.dx, self.dy)
+		self.move()
 		self.check_if_active()
 		self.check_objects(master_list)
 
@@ -371,3 +427,13 @@ class EventHook(object):
 				self -= theHandler
 
 Game()
+
+
+
+
+
+
+
+
+
+
