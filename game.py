@@ -25,10 +25,6 @@ class Objects():
 		if time.clock() > fire_time + wait_time:
 			return True
 
-	def move(self, x, y, dx, dy):
-		x += dx
-		y += dy
-
 class Game(Master):
 	def __init__(self):
 		super(Game, self).__init__()
@@ -47,7 +43,6 @@ class Game(Master):
 		self.lives = 3
 
 		self.update_list = []
-		self.to_delete = []
 
 		self.isStopped = True
 
@@ -64,6 +59,7 @@ class Game(Master):
 	def create_dude(self):
 		self.dude = Dude(self.canvas)
 		self.dude.shoot += self.create_lasers
+		self.dude.remove += self.remove_object
 		self.update_list.append(self.dude)
 
 	def create_aliens(self):
@@ -81,16 +77,18 @@ class Game(Master):
 				x_val = i * spacing + xborder
 				a = AlienTypeOne(x_val, y_val)
 				a.shoot += self.create_lasers
+				a.remove += self.remove_object
 				self.update_list.append(a)
 			index += 1
 
-	def create_lasers(self, x, y, origin):
-		l = Laser(x, y, origin)
+	def create_lasers(self, x, y, dx, dy, hit_list, graphic):
+		l = Laser(x, y, dx, dy, hit_list, graphic)
 		l.remove += self.remove_object
 		self.update_list.append(l)
 
 	def remove_object(self, obj):
-		self.update_list.remove(obj)
+		if obj in self.update_list:
+			self.update_list.remove(obj)
 		self.check_lives(obj)
 		self.check_if_win()
 
@@ -124,12 +122,12 @@ class Game(Master):
 		self.canvas.update()
 		self.canvas.delete("dude")
 		self.canvas.delete("alien")
+		self.canvas.delete("laser")
 
 	def update_model(self):
 		copy = self.update_list[:]
 		for obj in copy:
-			if obj in self.update_list:
-				obj.update(copy)
+			obj.update(copy)
 
 class Dude(Master, Objects):
 	def __init__(self, canvas):
@@ -157,11 +155,18 @@ class Dude(Master, Objects):
 		self.c.bind("<KeyRelease-d>", self.reset_movement)
 		self.c.pack()
 
-		self.shot_wait = 0.5
+		self.laser_graphic = '/Users/carollin/dev/space_invaders/graphics/redbeam.jpg'
+		self.laser_dx = 0
+		self.laser_dy = -6
+
+		self.shot_wait = 0.3
 		self.time_fired = 0
+
+		self.hit_list = [AlienTypeOne]
 
 		# event handlers
 		self.shoot = EventHook()
+		self.remove = EventHook()
 
 	# movement functions	
 	def left(self, event):
@@ -175,7 +180,8 @@ class Dude(Master, Objects):
 
 	def movement(self):
 		self.infinite_sides()
-		self.move(self.x, self.y, self.dx, self.dy)
+		self.x += self.dx
+		self.y += self.dy
 
 	def infinite_sides(self):
 		if self.x > self.screen_width:
@@ -183,18 +189,18 @@ class Dude(Master, Objects):
 		if self.x < 0:
 			self.x = self.screen_width - 5
 
-	# shooting functions
-
 	def shoot(self, event):
-		if self.check_time(self.time_fired, self.shot_wait) is True:
+		if self.wait_time(self.time_fired, self.shot_wait) is True:
 			mid_x = self.x + (self.width / 2)
 			top_y = self.y - self.height
-			self.shoot.fire(mid_x, top_y, "dude")
+			self.shoot.fire(mid_x, top_y, self.laser_dx, self.laser_dy, self.hit_list, self.laser_graphic)
 			self.time_fired = time.clock()
+
+	def hit(self, laser):
+		self.remove.fire(self)
 
 	def update(self, master_list):
 		self.movement()
-
 
 class AlienTypeOne(Master, Objects):
 	def __init__(self, x, y):
@@ -211,11 +217,16 @@ class AlienTypeOne(Master, Objects):
 		self.horizontal_jump = 20
 		self.vertical_jump = 20
 
-		self.move_wait = 1
+		self.laser_dx = 0
+		self.laser_dy = 6
+		self.laser_graphic = '/Users/carollin/dev/space_invaders/graphics/greenbeam.jpg'
+
+		self.move_wait = 0.5
 		self.shot_wait = 500
 		self.time_moved = 0
 
 		self.movement_list = []
+		self.hit_list = [Dude]
 
 		self.create_movement_pattern()
 
@@ -223,6 +234,10 @@ class AlienTypeOne(Master, Objects):
 
 		# event handlers
 		self.shoot = EventHook()
+		self.remove = EventHook()
+
+	def hit(self, laser):
+		self.remove.fire(self)
 
 	# movement functions
 
@@ -265,7 +280,8 @@ class AlienTypeOne(Master, Objects):
 		if self.wait_time(self.time_moved, self.move_wait) is True:
 			self.determine_move()
 
-			self.move(self.x, self.y, self.dx, self.dy)
+			self.x += self.dx
+			self.y += self.dy
 
 			self.shift_moves()
 			self.time_moved = time.clock()
@@ -279,7 +295,7 @@ class AlienTypeOne(Master, Objects):
 	def attempt_shot(self):
 		if self.randomize() == "go":
 			mid_x = self.x + (self.width / 2)
-			self.shoot.fire(mid_x, self.y, "alien")
+			self.shoot.fire(mid_x, self.y, self.laser_dx, self.laser_dy, self.hit_list, self.laser_graphic)
 
 	def randomize(self):
 		if random.randrange(self.shot_wait) == 1:
@@ -290,33 +306,28 @@ class AlienTypeOne(Master, Objects):
 		self.attempt_shot()
 
 class Laser(Master, Objects):
-	def __init__(self, x, y, origin):
+	def __init__(self, x, y, dx, dy, hit_list, graphic):
 		super(Laser, self).__init__()
 
 		self.height = 15
 		self.width = 5
 		self.x = x
 		self.y = y
-		self.dx = 0
-		self.dy = 0
-		self.movement_speed = 6
-		self.aliensource = '/Users/carollin/dev/space_invaders/graphics/greenbeam.jpg'
-		self.dudesource = '/Users/carollin/dev/space_invaders/graphics/redbeam.jpg'
+		self.dx = dx
+		self.dy = dy
 
-		self.determine_type(origin)
+		self.graphic = self.image_convert(graphic, self.width, self.height)
 
-		# event handlers
+		self.tag = "laser"
+
+		self.hit_list = hit_list
+
+		# event
 		self.remove = EventHook()
-		
-	def determine_type(self, origin):
-		if origin == "dude":
-			self.dy = self.movement_speed * -1
-			self.graphic = self.image_convert(self.dudesource, self.width, self.height)
-			self.tag = "dude"
-		elif origin == "alien":
-			self.dy = self.movement_speed * 1
-			self.graphic = self.image_convert(self.aliensource, self.width, self.height)
-			self.tag = "alien"
+
+	def move(self):
+		self.x += self.dx
+		self.y += self.dy
 
 	def x_test(self, obj):
 		if self.x + self.width >= obj.x and self.x <= obj.x + obj.width:
@@ -331,21 +342,21 @@ class Laser(Master, Objects):
 			self.check_type(obj)
 
 	def check_type(self, obj):
-		if type(obj) is not Laser:
+		if type(obj) in self.hit_list:
 			self.check_boundaries(obj)
 
 	def check_boundaries(self, obj):
 		if self.tag != obj.tag:
 			if self.x_test(obj) is True and self.y_test(obj) is True:
+				obj.hit(self)
 				self.remove.fire(self)
-				self.remove.fire(obj)
 
 	def check_if_active(self):
 		if self.y > self.screen_height or self.y < 0:
 			self.remove.fire(self)
 
 	def update(self, master_list):
-		self.move(self.x, self.y, self.dx, self.dy)
+		self.move()
 		self.check_if_active()
 		self.check_objects(master_list)
 
