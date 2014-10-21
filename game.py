@@ -25,9 +25,91 @@ class Objects():
 		if time.clock() > fire_time + wait_time:
 			return True
 
+class Level(Master):
+	def __init__(self):
+		super(Level, self).__init__()
+
+		self.level_one_aliens()
+		self. level_two_aliens()
+
+	def load_level_aliens(self, level):
+		if level == "one":
+			return self.level_one_xy_aliens
+		if level == "two":
+			return self.level_two_xy_group1, self.level_two_xy_group2
+
+	def load_level_barriers(self, level):
+		if level == "one":
+			return self.level_one_xy_barriers
+		if level == "two":
+			return self.level_two_xy_barriers
+
+	def level_one_barriers(self):
+		self.level_one_xy_barriers = []
+		groups = 3
+		columns = 3
+		rows = 4
+		xspacing = 50
+
+	def level_one_aliens(self):
+		self.level_one_xy_aliens = []
+		columns = 12
+		rows = 5
+		xborder = 25
+		yborder = 50
+		xspacing = self.screen_width / 20
+		yspacing = xspacing
+
+		self.add_rows_columns(self.level_one_xy, columns, rows, xborder, yborder, xspacing, yspacing)
+
+	def level_two_aliens(self):
+		self.level_two_xy_group1 = []
+		columns = 6
+		rows = 3
+		xborder = 25
+		yborder = 50
+		xspacing = self.screen_width / 20
+		yspacing = xspacing + 40
+
+		self.add_rows_columns(self.level_two_xy_group1, columns, rows, xborder, yborder, xspacing, yspacing)
+
+		self.level_two_xy_group2 = []
+		columns = 6
+		rows = 3
+		xborder = self.screen_width - 25
+		yborder = 50
+		spacing = self.screen_width / 20
+
+		self.add_rows_columns(self.level_two_xy_group2, columns, rows, xborder, yborder, xspacing, yspacing)
+
+	def add_rows_columns(self, end_list, columns, rows, xborder, yborder, xspacing, yspacing):
+		index = 1
+		while index <= rows:
+			y_val = (index - 1) * yspacing + yborder
+			for i in range(columns - 1):
+				x_val = i * xspacing + xborder
+				add = x_val, y_val
+				end_list.append(add)
+			index += 1
+		return end_list
+
 class Game(Master):
 	def __init__(self):
 		super(Game, self).__init__()
+
+		self.sleepTime = 5
+		self.lives = 3
+
+		self.update_list = []
+
+		self.isStopped = True
+
+		self.level = Level()
+		self.current_level = "one"
+
+		self.load_screen()
+
+	def load_screen(self):
 		w = Tk()
 
 		self.background = '/Users/carollin/dev/space_invaders/graphics/background.png'
@@ -39,21 +121,14 @@ class Game(Master):
 		self.backgroundimage = self.image_convert(self.background, self.screen_width, self.screen_height)
 		self.canvas.create_image(0, 0, image = self.backgroundimage, anchor = NW)
 
-		self.sleepTime = 5
-		self.lives = 3
-
-		self.update_list = []
-
-		self.isStopped = True
-
-		self.start()
+		self.start(self.current_level)
 
 		w.mainloop()
 
-	def start(self):
+	def start(self, current_level):
 		self.isStopped = False
 		self.create_dude()
-		self.create_aliens()
+		self.create_level(current_level)
 		self.mainloop()
 
 	def create_dude(self):
@@ -62,24 +137,28 @@ class Game(Master):
 		self.dude.remove += self.remove_object
 		self.update_list.append(self.dude)
 
-	def create_aliens(self):
-		columns = 12
-		rows = 5
-		xborder = 15
-		yborder = 50
-		spacing = self.screen_width / 20
-		index = 1
-		# getting 5 rows of aliens
-		while index % (rows + 1) != 0:
-			y_val = (index - 1) * spacing + yborder
-			# getting 12 columns of alines
-			for i in range(columns - 1):
-				x_val = i * spacing + xborder
-				a = AlienTypeOne(x_val, y_val)
-				a.shoot += self.create_lasers
-				a.remove += self.remove_object
-				self.update_list.append(a)
-			index += 1
+	def create_level(self, current_level):
+		self.create_aliens(current_level)
+		self.create_barriers(current_level)
+
+	def create_aliens(self, current_level):
+		xy_list = self.level.load_level_aliens(current_level)
+		for i in xy_list:
+			x = i[0]
+			y = i[1]
+			a = AlienTypeOne(x, y)
+			a.shoot += self.create_lasers
+			a.remove += self.remove_object
+			self.update_list.append(a)
+
+	def create_barriers(self, current_level):
+		xy_list = self.level.load_level_barriers(current_level)
+		for i in xy_list:
+			x = i[0]
+			y = i[1]
+			b = Barrier(x, y)
+			b.remove += self.remove_object
+			self.update_list.append(b)
 
 	def create_lasers(self, x, y, dx, dy, hit_list, graphic):
 		l = Laser(x, y, dx, dy, hit_list, graphic)
@@ -162,6 +241,8 @@ class Dude(Master, Objects):
 		self.shot_wait = 0.3
 		self.time_fired = 0
 
+		self.spawn_time = time.clock()
+
 		self.hit_list = [AlienTypeOne]
 
 		# event handlers
@@ -197,7 +278,12 @@ class Dude(Master, Objects):
 			self.time_fired = time.clock()
 
 	def hit(self, laser):
-		self.remove.fire(self)
+		if self.invincible() is True:
+			self.remove.fire(self)
+
+	def invincible(self):
+		if (time.clock() - self.spawn_time) > 3:
+			return True
 
 	def update(self, master_list):
 		self.movement()
@@ -360,6 +446,21 @@ class Laser(Master, Objects):
 		self.check_if_active()
 		self.check_objects(master_list)
 
+class Barrier(Master, Objects):
+	def __init__(self, x, y):
+		self.x = x
+		self.y = y
+		self.width = 30
+		self.height = 20
+		self.source = '/Users/carollin/dev/space_invaders/graphics/barrier.jpg'
+
+		self.graphic = self.image_convert(self.source, self.width, self.height)
+
+		self.remove = EventHook()
+
+	def hit(self):
+		self.remove.fire(self)
+
 class EventHook(object):
 	def __init__(self):
 		self.__handlers = []
@@ -382,3 +483,4 @@ class EventHook(object):
 				self -= theHandler
 
 Game()
+
