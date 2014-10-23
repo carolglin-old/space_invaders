@@ -110,8 +110,15 @@ levels = {
 # print(doobie)
 
 derp = [("right", 18), ("down", 1), ("left", 18), ("down", 1)]
-print(derp[0])
-print(derp[0][1])
+underp = []
+
+for i in levels["one"][0]["movement"]:
+	j = 0
+	while j < i[1]:
+		underp.append(i[0])
+		j += 1
+
+print(underp)
 
 
 

@@ -25,42 +25,92 @@ class Objects():
 		if time.clock() > fire_time + wait_time:
 			return True
 
-class LevelManager(Master):
-	def __init__(self):
+class LevelManager():
+	def __init__(self, canvas):
+		print("level manager called")
 		self.current_level = "one"
 		self.next_level = "two" 
 		self.levels = Levels() # returns a dictionary
 		self.current_dict = {}
 
+		self.c = canvas
+
+		self.alien_load_list = []
+		self.barrier_load_list = []
+		self.dude_load_list = []
+
+		self.create = EventHook()
+
 		self.init_level(self.current_level)
 
-	def init_level(self, master_dict, current_dict_key):
+	def init_level(self, current_dict_key):
+		print("init level")
 		self.current_dict = self.levels.data[current_dict_key]
+		print(self.current_dict)
 		self.load_level(self.current_dict)
 
+	def load_level(self, current_dict):
+		print("load level")
+		for i in range(len(current_dict)):
+			if current_dict[i]["type"] == Dude:
+				self.create_object(current_dict[i]["type"], self.dude_load_list)
+			if current_dict[i]["type"] == AlienTypeOne:
+				self.load_aliens(current_dict[i])
+			if current_dict[i]["type"] == Barrier:
+				self.load_barriers(current_dict[i])
 
-	def add_rows_columns(self, end_list, columns, rows, xborder, yborder, xspacing, yspacing):
+	def load_barriers(self, raw):
+		print("load barriers")
+		self.add_rows_columns(self.barrier_load_list, raw["rows"], raw["columns"], raw["xborder"], raw["yborder"], raw["xspacing"], raw["yspacing"])
+		self.create_object(raw["type"], self.barrier_load_list)
+
+	def load_aliens(self, raw):
+		print("load aliens")
+		self.add_rows_columns(self.alien_load_list, raw["rows"], raw["columns"], raw["xborder"], raw["yborder"], raw["xspacing"], raw["yspacing"])
+		self.combine_list(raw)
+		self.create_object(raw["type"], self.alien_load_list)
+
+	def combine_list(self, raw):
+		print("combine list")
+		for i in self.alien_load_list:
+			i.append(self.movement_pattern(raw["movement"]))
+
+	def movement_pattern(self, raw_movement_data):
+		movement_list = []
+		for i in raw_movement_data:
+			j = 0
+			while j < i[1]:
+				movement_list.append(i[0])
+				j += 1
+		return movement_list
+
+	def add_rows_columns(self, end_list, rows, columns, xborder, yborder, xspacing, yspacing):
+		print("add rows columns")
 		index = 1
 		while index <= rows:
 			y_val = (index - 1) * yspacing + yborder
 			for i in range(columns - 1):
 				x_val = i * xspacing + xborder
-				add = x_val, y_val
+				add = [x_val, y_val]
 				end_list.append(add)
-			index += 1
-		return end_list
+			index += 1 
 
-	def create_movement_pattern(self, raw_movement_list):
-		movement_list = []
-		for i in raw_movement_list:
-			for j in range(i[1] - 1):
-				movement_list.append(i[0])
-		return movement_list
-
-	def create_aliens(self, x, y, dx, dy, movement_list):
-
-
-
+	def create_object(self, object_type, create_list):
+		print("create", object_type)
+		if object_type is Dude:
+			d = Dude(self.c)
+			print("created dude")
+			self.create.fire(d)
+		if object_type is AlienTypeOne:
+			for i in create_list:
+				a = AlienTypeOne(i[0], i[1], i[2]) 
+				print("created alien")
+				self.create.fire(a)
+		if object_type is Barrier:
+			for i in create_list:
+				b = Barrier(i[0], i[1])
+				print("created barrier")
+				self.create.fire(b)
 
 class Game(Master):
 	def __init__(self):
@@ -73,15 +123,12 @@ class Game(Master):
 
 		self.isStopped = True
 
-		self.level = Level()
-		self.current_level = "one"
-
 		self.load_screen()
 
 	def load_screen(self):
 		w = Tk()
 
-		self.background = '/Users/carollin/dev/space_invaders/graphics/background.png'
+		self.background = '/Users/carollin/Dev/space_invaders/graphics/background.png'
 		size = self.screen_width, self.screen_height
 
 		self.canvas = Canvas(w, width = self.screen_width, height = self.screen_height)
@@ -90,16 +137,19 @@ class Game(Master):
 		self.backgroundimage = self.image_convert(self.background, self.screen_width, self.screen_height)
 		self.canvas.create_image(0, 0, image = self.backgroundimage, anchor = NW)
 
-		self.start(self.current_level)
+		self.start()
 
 		w.mainloop()
 
-	def start(self, current_level):
+	def start(self):
+		print("start")
 		self.isStopped = False
-		# load level
+		self.level_manager = LevelManager(self.canvas)
+		self.level_manager.create += self.add_to_update_list
 		self.mainloop()
 
 	def add_to_update_list(self, obj):
+		print("add to update list", obj)
 		self.update_list.append(obj)
 
 	def remove_object(self, obj):
@@ -125,6 +175,8 @@ class Game(Master):
 				self.canvas.create_text(self.screen_width / 2, self.screen_height / 2, fill = "yellow", text = "YOU LOSE! Oh poo")
 
 	def mainloop(self):
+		print("mainloop")
+		print(self.update_list)
 		while not self.isStopped:
 			self.canvas.after(self.sleepTime)
 			self.update_model()
@@ -139,6 +191,7 @@ class Game(Master):
 		self.canvas.delete("dude")
 		self.canvas.delete("alien")
 		self.canvas.delete("laser")
+		self.canvas.delete("barrier")
 
 	def update_model(self):
 		copy = self.update_list[:]
@@ -151,7 +204,8 @@ class Barrier(Master, Objects):
 		self.y = y
 		self.width = 30
 		self.height = 20
-		self.source = '/Users/carollin/dev/space_invaders/graphics/barrier.jpg'
+		self.tag = "barrier"
+		self.source = '/Users/carollin/Dev/space_invaders/graphics/barrier.jpg'
 
 		self.graphic = self.image_convert(self.source, self.width, self.height)
 
@@ -159,6 +213,10 @@ class Barrier(Master, Objects):
 
 	def hit(self):
 		self.remove.fire(self)
+
+	def update(self):
+		print("attempt to update barrier!")
+
 
 class Dude(Master, Objects):
 	def __init__(self, canvas):
@@ -170,7 +228,7 @@ class Dude(Master, Objects):
 		self.y = self.screen_height - 5
 		self.dx = 0
 		self.dy = 0
-		self.source = '/Users/carollin/dev/space_invaders/graphics/dude.png'
+		self.source = '/Users/carollin/Dev/space_invaders/graphics/dude.png'
 		self.tag = "dude"
 		self.movement_speed = 4
 
@@ -186,7 +244,7 @@ class Dude(Master, Objects):
 		self.c.bind("<KeyRelease-d>", self.reset_movement)
 		self.c.pack()
 
-		self.laser_graphic = '/Users/carollin/dev/space_invaders/graphics/redbeam.jpg'
+		self.laser_graphic = '/Users/carollin/Dev/space_invaders/graphics/redbeam.jpg'
 		self.laser_dx = 0
 		self.laser_dy = -6
 
@@ -198,11 +256,8 @@ class Dude(Master, Objects):
 		self.hit_list = [AlienTypeOne]
 
 		# event handlers
-		self.create = EventHook()
 		self.shoot = EventHook()
 		self.remove = EventHook()
-
-		self.create.fire(self)
 
 	# movement functions	
 	def left(self, event):
@@ -244,41 +299,36 @@ class Dude(Master, Objects):
 		self.movement()
 
 class AlienTypeOne(Master, Objects):
-	def __init__(self, x, y):
+	def __init__(self, x, y, movement_list):
 		super(AlienTypeOne, self).__init__()
 
 		self.height = 35
 		self.width = 35
 		self.x = x
 		self.y = y
-		self.dx = 20
-		self.dy = 40
-		self.source = '/Users/carollin/dev/space_invaders/graphics/alien1.png'
+		self.dx = 0
+		self.dy = 0
+		self.source = '/Users/carollin/Dev/space_invaders/graphics/alien1.png'
 		self.tag = "alien"
 		self.horizontal_jump = 20
 		self.vertical_jump = 20
 
 		self.laser_dx = 0
 		self.laser_dy = 6
-		self.laser_graphic = '/Users/carollin/dev/space_invaders/graphics/greenbeam.jpg'
+		self.laser_graphic = '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg'
 
 		self.move_wait = 0.5
 		self.shot_wait = 500
 		self.time_moved = 0
 
-		self.movement_list = []
+		self.movement_list = movement_list
 		self.hit_list = [Dude]
-
-		self.create_movement_pattern()
 
 		self.graphic = self.image_convert(self.source, self.width, self.height)
 
 		# event handlers
-		self.create = EventHook()
 		self.shoot = EventHook()
 		self.remove = EventHook()
-
-		self.create.fire(self)
 
 	def hit(self, laser):
 		self.remove.fire(self)
@@ -303,13 +353,13 @@ class AlienTypeOne(Master, Objects):
 
 	def determine_move(self):
 		direction = self.movement_list[0]
-		if direction == 'left':
+		if direction == "left":
 			self.left()
-		elif direction == 'right':
+		elif direction == "right":
 			self.right()
-		elif direction == 'up':
+		elif direction == "up":
 			self.up()
-		else: 
+		elif direct == "down": 
 			self.down()
 
 	def movement(self):
@@ -400,14 +450,14 @@ class Levels:
 	def __init__(self):
 		self.data = {
 			"one": [ 
-				{ 
+				{
+					"type": Dude
+				}, {
 					"type": AlienTypeOne,
 					"rows": 5,
 					"columns": 12,
 					"xborder": 25,
 					"yborder": 50,
-					"dx": 6,
-					"dy": 0,
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
@@ -421,19 +471,25 @@ class Levels:
 					"rows": 3,
 					"columns": 6,
 					"xborder": 100,
-					"yborder": 400
+					"yborder": 400,
+					"xspacing": 0,
+					"yspacing": 0
 				}, {
 					"type": Barrier,
 					"rows": 3,
 					"columns": 6,
 					"xborder": 340,
-					"yborder": 400
+					"yborder": 400,
+					"xspacing": 0,
+					"yspacing": 0
 				}, {
 					"type": Barrier,
 					"rows": 3,
 					"columns": 6,
 					"xborder": 580,
-					"yborder": 400
+					"yborder": 400,
+					"xspacing": 0,
+					"yspacing": 0
 				}
 			], "two": [ 
 				{
@@ -442,8 +498,6 @@ class Levels:
 					"columns": 6,
 					"xborder": 25,
 					"yborder": 50,
-					"dx": 6,
-					"dy": 0,
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
@@ -458,8 +512,6 @@ class Levels:
 					"columns": 6,
 					"xborder": 535,
 					"yborder": 50,
-					"dx": -6,
-					"dy": 0,
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
@@ -473,19 +525,25 @@ class Levels:
 					"rows": 3,
 					"columns": 6,
 					"xborder": 100,
-					"yborder": 400
+					"yborder": 400,
+					"xspacing": 0,
+					"yspacing": 0
 				}, {
 					"type": Barrier,
 					"rows": 3,
 					"columns": 6,
 					"xborder": 340,
-					"yborder": 400
+					"yborder": 400,
+					"xspacing": 0,
+					"yspacing": 0
 				}, {
 					"type": Barrier,
 					"rows": 3,
 					"columns": 6,
 					"xborder": 580,
-					"yborder": 400
+					"yborder": 400,
+					"xspacing": 0,
+					"yspacing": 0
 				}
 			]		
 		}
