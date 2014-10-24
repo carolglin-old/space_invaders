@@ -25,11 +25,15 @@ class Objects():
 		if time.clock() > fire_time + wait_time:
 			return True
 
+	def create_laser(self, x, y, dx, dy, hit_list, graphic):
+		l = Laser(x, y, dx, dy, hit_list, graphic)
+		self.create.fire(l)
+
 class LevelManager():
 	def __init__(self, canvas):
-		print("level manager called")
-		self.current_level = "one"
+		self.current_level = "two"
 		self.next_level = "two" 
+		self.final_level = "three"
 		self.levels = Levels() # returns a dictionary
 		self.current_dict = {}
 
@@ -38,19 +42,15 @@ class LevelManager():
 		self.alien_load_list = []
 		self.barrier_load_list = []
 		self.dude_load_list = []
+		self.laser_load_list = []
 
 		self.create = EventHook()
 
-		self.init_level(self.current_level)
-
-	def init_level(self, current_dict_key):
-		print("init level")
-		self.current_dict = self.levels.data[current_dict_key]
-		print(self.current_dict)
+	def init_level(self, current_level):
+		self.current_dict = self.levels.data[current_level]
 		self.load_level(self.current_dict)
 
 	def load_level(self, current_dict):
-		print("load level")
 		for i in range(len(current_dict)):
 			if current_dict[i]["type"] == Dude:
 				self.create_object(current_dict[i]["type"], self.dude_load_list)
@@ -60,18 +60,15 @@ class LevelManager():
 				self.load_barriers(current_dict[i])
 
 	def load_barriers(self, raw):
-		print("load barriers")
 		self.add_rows_columns(self.barrier_load_list, raw["rows"], raw["columns"], raw["xborder"], raw["yborder"], raw["xspacing"], raw["yspacing"])
 		self.create_object(raw["type"], self.barrier_load_list)
 
 	def load_aliens(self, raw):
-		print("load aliens")
 		self.add_rows_columns(self.alien_load_list, raw["rows"], raw["columns"], raw["xborder"], raw["yborder"], raw["xspacing"], raw["yspacing"])
 		self.combine_list(raw)
 		self.create_object(raw["type"], self.alien_load_list)
 
 	def combine_list(self, raw):
-		print("combine list")
 		for i in self.alien_load_list:
 			i.append(self.movement_pattern(raw["movement"]))
 
@@ -85,7 +82,6 @@ class LevelManager():
 		return movement_list
 
 	def add_rows_columns(self, end_list, rows, columns, xborder, yborder, xspacing, yspacing):
-		print("add rows columns")
 		index = 1
 		while index <= rows:
 			y_val = (index - 1) * yspacing + yborder
@@ -96,20 +92,16 @@ class LevelManager():
 			index += 1 
 
 	def create_object(self, object_type, create_list):
-		print("create", object_type)
 		if object_type is Dude:
 			d = Dude(self.c)
-			print("created dude")
 			self.create.fire(d)
 		if object_type is AlienTypeOne:
 			for i in create_list:
 				a = AlienTypeOne(i[0], i[1], i[2]) 
-				print("created alien")
 				self.create.fire(a)
 		if object_type is Barrier:
 			for i in create_list:
 				b = Barrier(i[0], i[1])
-				print("created barrier")
 				self.create.fire(b)
 
 class Game(Master):
@@ -131,26 +123,42 @@ class Game(Master):
 		self.background = '/Users/carollin/Dev/space_invaders/graphics/background.png'
 		size = self.screen_width, self.screen_height
 
+		frame = Frame()
+
 		self.canvas = Canvas(w, width = self.screen_width, height = self.screen_height)
 		self.canvas.pack(expand = YES, fill = BOTH)
+
+		self.canvas.focus_set()
+		self.start_button = Button(self.canvas, text = "Start", command = self.start)
+		self.start_button.pack()
 
 		self.backgroundimage = self.image_convert(self.background, self.screen_width, self.screen_height)
 		self.canvas.create_image(0, 0, image = self.backgroundimage, anchor = NW)
 
-		self.start()
+		self.level_manager = LevelManager(self.canvas)
+		self.level_manager.create += self.add_to_update_list
+
+		self.create_start_button()
 
 		w.mainloop()
 
+	def create_start_button(self):
+		self.canvas.focus_set()
+		self.canvas.create_window(self.screen_width / 2, self.screen_height / 2, window = self.start_button, tags = "start")
+
 	def start(self):
-		print("start")
 		self.isStopped = False
-		self.level_manager = LevelManager(self.canvas)
-		self.level_manager.create += self.add_to_update_list
+		self.canvas.delete("start")
+		self.canvas.delete("text")
+		print(self.level_manager.current_level)
+		self.level_manager.init_level(self.level_manager.current_level)
 		self.mainloop()
 
 	def add_to_update_list(self, obj):
-		print("add to update list", obj)
 		self.update_list.append(obj)
+		obj.remove += self.remove_object
+		if hasattr(obj, "create"):
+			obj.create += self.add_to_update_list
 
 	def remove_object(self, obj):
 		if obj in self.update_list:
@@ -164,19 +172,23 @@ class Game(Master):
 			if type(obj) is AlienTypeOne:
 				aliens_remaining += 1
 		if aliens_remaining == 0:
-			self.canvas.create_text(self.screen_width / 2, self.screen_height / 2, fill = "yellow", text = "YOU WIN! w00t!")
+			self.next_level()
+
+	def next_level(self):
+		self.isStopped = True
+		self.canvas.create_text(self.screen_width / 2, (self.screen_height / 2) - 100, fill = "yellow", text = "Next Level! Ready?", tags = "text")
+		self.create_start_button()
+		self.level_manager.current_level = self.level_manager.next_level
 
 	def check_lives(self, obj):
 		if type(obj) is Dude:
 			self.lives -= 1
 			if self.lives > 0:
-				self.create_dude()
+				self.level_manager.create_object(Dude, self.level_manager.dude_load_list)
 			else:
 				self.canvas.create_text(self.screen_width / 2, self.screen_height / 2, fill = "yellow", text = "YOU LOSE! Oh poo")
 
 	def mainloop(self):
-		print("mainloop")
-		print(self.update_list)
 		while not self.isStopped:
 			self.canvas.after(self.sleepTime)
 			self.update_model()
@@ -198,7 +210,7 @@ class Game(Master):
 		for obj in copy:
 			obj.update(copy)
 
-class Barrier(Master, Objects):
+class Barrier(Master):
 	def __init__(self, x, y):
 		self.x = x
 		self.y = y
@@ -211,11 +223,11 @@ class Barrier(Master, Objects):
 
 		self.remove = EventHook()
 
-	def hit(self):
+	def hit(self, laser):
 		self.remove.fire(self)
 
-	def update(self):
-		print("attempt to update barrier!")
+	def update(self, master_list):
+		self.tag = "barrier"
 
 
 class Dude(Master, Objects):
@@ -253,10 +265,10 @@ class Dude(Master, Objects):
 
 		self.spawn_time = time.clock()
 
-		self.hit_list = [AlienTypeOne]
+		self.hit_list = [AlienTypeOne, Barrier]
 
 		# event handlers
-		self.shoot = EventHook()
+		self.create = EventHook()
 		self.remove = EventHook()
 
 	# movement functions	
@@ -284,7 +296,7 @@ class Dude(Master, Objects):
 		if self.wait_time(self.time_fired, self.shot_wait) is True:
 			mid_x = self.x + (self.width / 2)
 			top_y = self.y - self.height
-			self.shoot.fire(mid_x, top_y, self.laser_dx, self.laser_dy, self.hit_list, self.laser_graphic)
+			self.create_laser(mid_x, top_y, self.laser_dx, self.laser_dy, self.hit_list, self.laser_graphic)
 			self.time_fired = time.clock()
 
 	def hit(self, laser):
@@ -322,12 +334,12 @@ class AlienTypeOne(Master, Objects):
 		self.time_moved = 0
 
 		self.movement_list = movement_list
-		self.hit_list = [Dude]
+		self.hit_list = [Dude, Barrier]
 
 		self.graphic = self.image_convert(self.source, self.width, self.height)
 
 		# event handlers
-		self.shoot = EventHook()
+		self.create = EventHook()
 		self.remove = EventHook()
 
 	def hit(self, laser):
@@ -359,7 +371,7 @@ class AlienTypeOne(Master, Objects):
 			self.right()
 		elif direction == "up":
 			self.up()
-		elif direct == "down": 
+		elif direction == "down": 
 			self.down()
 
 	def movement(self):
@@ -381,7 +393,7 @@ class AlienTypeOne(Master, Objects):
 	def attempt_shot(self):
 		if self.randomize() == "go":
 			mid_x = self.x + (self.width / 2)
-			self.shoot.fire(mid_x, self.y, self.laser_dx, self.laser_dy, self.hit_list, self.laser_graphic)
+			self.create_laser(mid_x, self.y, self.laser_dx, self.laser_dy, self.hit_list, self.laser_graphic)
 
 	def randomize(self):
 		if random.randrange(self.shot_wait) == 1:
@@ -391,7 +403,7 @@ class AlienTypeOne(Master, Objects):
 		self.movement()
 		self.attempt_shot()
 
-class Laser(Master, Objects):
+class Laser(Master):
 	def __init__(self, x, y, dx, dy, hit_list, graphic):
 		super(Laser, self).__init__()
 
@@ -454,16 +466,16 @@ class Levels:
 					"type": Dude
 				}, {
 					"type": AlienTypeOne,
-					"rows": 5,
+					"rows": 6,
 					"columns": 12,
 					"xborder": 25,
 					"yborder": 50,
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
-						("right", 18),
+						("right", 16),
 						("down", 1),
-						("left", 18),
+						("left", 16),
 						("down", 1)
 					]
 				}, {
@@ -471,25 +483,25 @@ class Levels:
 					"rows": 3,
 					"columns": 6,
 					"xborder": 100,
-					"yborder": 400,
-					"xspacing": 0,
-					"yspacing": 0
+					"yborder": 450,
+					"xspacing": 30,
+					"yspacing": 20
 				}, {
 					"type": Barrier,
 					"rows": 3,
 					"columns": 6,
 					"xborder": 340,
-					"yborder": 400,
-					"xspacing": 0,
-					"yspacing": 0
+					"yborder": 450,
+					"xspacing": 30,
+					"yspacing": 20
 				}, {
 					"type": Barrier,
 					"rows": 3,
 					"columns": 6,
 					"xborder": 580,
-					"yborder": 400,
-					"xspacing": 0,
-					"yspacing": 0
+					"yborder": 450,
+					"xspacing": 30,
+					"yspacing": 20
 				}
 			], "two": [ 
 				{
@@ -501,49 +513,51 @@ class Levels:
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
-						("right", 9),
+						("right", 8),
 						("down", 1),
-						("left", 9),
-						("down", 1)	
-						]
-				}, {
-					"type": AlienTypeOne,
-					"rows": 5,
-					"columns": 6,
-					"xborder": 535,
-					"yborder": 50,
-					"xspacing": 40,
-					"yspacing": 40,
-					"movement": [
-						("left", 9),
-						("down", 1),
-						("right", 9),
+						("left", 8),
 						("down", 1)	
 					]
-				}, {
+				}, 
+				# {
+				# 	"type": AlienTypeOne,
+				# 	"rows": 5,
+				# 	"columns": 6,
+				# 	"xborder": 535,
+				# 	"yborder": 50,
+				# 	"xspacing": 40,
+				# 	"yspacing": 40,
+				# 	"movement": [
+				# 		("left", 8),
+				# 		("down", 1),
+				# 		("right", 8),
+				# 		("down", 1)	
+				# 	]
+				# }, 
+				{
 					"type": Barrier,
-					"rows": 3,
+					"rows": 2,
 					"columns": 6,
 					"xborder": 100,
-					"yborder": 400,
-					"xspacing": 0,
-					"yspacing": 0
+					"yborder": 450,
+					"xspacing": 30,
+					"yspacing": 20
 				}, {
 					"type": Barrier,
-					"rows": 3,
+					"rows": 2,
 					"columns": 6,
 					"xborder": 340,
-					"yborder": 400,
-					"xspacing": 0,
-					"yspacing": 0
+					"yborder": 450,
+					"xspacing": 30,
+					"yspacing": 20
 				}, {
 					"type": Barrier,
-					"rows": 3,
+					"rows": 2,
 					"columns": 6,
 					"xborder": 580,
-					"yborder": 400,
-					"xspacing": 0,
-					"yspacing": 0
+					"yborder": 450,
+					"xspacing": 30,
+					"yspacing": 20
 				}
 			]		
 		}
