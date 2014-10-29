@@ -3,6 +3,7 @@ from PIL import Image, ImageTk
 import random
 import math
 import time
+import pygame.mixer as mix
 import pdb
 
 class CanvasObjects():
@@ -20,6 +21,14 @@ class CanvasObjects():
 	def draw(self, canvas, x, y, graphic, tag):
 		canvas.create_image(x, y, image = graphic, anchor = SW, tag = tag)
 
+	def play(self, music_file, volume = 0.8):
+		mix.music.stop()
+		mix.music.load(music_file)
+		mix.music.play()
+
+	def stop_music(self):
+		mix.music.stop()
+
 class GameObjects(CanvasObjects):
 	def __init__(self, width, height, source):
 		super().__init__()
@@ -31,6 +40,8 @@ class GameObjects(CanvasObjects):
 		self.remove = EventHook()
 
 		self.graphic = self.image_convert(self.source, self.width, self.height)
+
+		mix.init()
 
 		self.tag = "game_object"
 
@@ -44,8 +55,13 @@ class GameObjects(CanvasObjects):
 
 	def hit(self, laser):
 		self.remove.fire(self)
+		self.animate()
 
-class LevelManager():
+	def animate(self):
+		a = Animation(self.x, self.y, self.animation_width, self.animation_height, self.animation_graphic, self.num_sprites)
+		self.create.fire(a)
+
+class LevelManager(CanvasObjects):
 	def __init__(self, canvas):
 		self.levels = Levels()
 		self.current = 0
@@ -128,7 +144,7 @@ class LevelManager():
 
 class Game(CanvasObjects):
 	def __init__(self):
-		super(Game, self).__init__()
+		super().__init__()
 
 		self.sleepTime = 5
 		self.lives = 3
@@ -243,6 +259,11 @@ class Barrier(GameObjects):
 		self.x = x
 		self.y = y
 
+		self.animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/barrierexplosion.png'
+		self.animation_width = 250
+		self.animation_height = 46
+		self.num_sprites = 5
+
 	def update(self):
 		pass
 
@@ -272,6 +293,7 @@ class Dude(GameObjects):
 		self.laser_graphic = '/Users/carollin/Dev/space_invaders/graphics/redbeam.jpg'
 		self.laser_dx = 0
 		self.laser_dy = -6
+		self.laser_sound = '/Users/carollin/Dev/space_invaders/sounds/dudelaser.ogg'
 
 		self.animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/dudeexplosion.png'
 		self.animation_width = 1024
@@ -313,6 +335,7 @@ class Dude(GameObjects):
 			mid_x = self.x + (self.width / 2)
 			top_y = self.y - self.height
 			self.create_laser(mid_x, top_y, self.laser_dx, self.laser_dy, self.hit_list, self.laser_graphic)
+			self.play(self.laser_sound)
 			self.time_fired = time.clock()
 
 	def stop_shoot(self, event):
@@ -326,10 +349,6 @@ class Dude(GameObjects):
 	def invincible(self):
 		if (time.clock() - self.spawn_time) > 3:
 			return True
-
-	def animate(self):
-		a = Animation(self.x, self.y, self.animation_width, self.animation_height, self.animation_graphic, self.num_sprites)
-		self.create.fire(a)
 
 	def update(self):
 		self.movement()
@@ -348,6 +367,7 @@ class AlienTypeOne(GameObjects):
 		self.laser_dx = 0
 		self.laser_dy = 6
 		self.laser_graphic = '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg'
+		self.laser_sound = '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg'
 
 		self.animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/alienexplosion.png'
 		self.animation_width = 320
@@ -360,14 +380,6 @@ class AlienTypeOne(GameObjects):
 
 		self.movement_list = movement_list
 		self.hit_list = [Dude, Barrier]
-
-	def hit(self, laser):
-		self.remove.fire(self)
-		self.animate()
-
-	def animate(self):
-		a = Animation(self.x, self.y, self.animation_width, self.animation_height, self.animation_graphic, self.num_sprites)
-		self.create.fire(a)
 
 	# movement functions
 
@@ -416,6 +428,7 @@ class AlienTypeOne(GameObjects):
 
 	def attempt_shot(self):
 		if self.randomize() == "go":
+			self.play(self.laser_sound)
 			mid_x = self.x + (self.width / 2)
 			self.create_laser(mid_x, self.y, self.laser_dx, self.laser_dy, self.hit_list, self.laser_graphic)
 
