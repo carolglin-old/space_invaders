@@ -69,6 +69,8 @@ class LevelManager(CanvasObjects):
 
 		self.c = canvas
 
+		self.a = AlienTypes()
+
 		self.dude_load_list = []
 		self.laser_load_list = []
 
@@ -84,7 +86,7 @@ class LevelManager(CanvasObjects):
 		for i in current_level:
 			if i["type"] == Dude:
 				self.create_object(i["type"])
-			if i["type"] == AlienTypeOne:
+			if i["type"] == Alien:
 				self.alien_load_list = []
 				self.load_block(i, self.alien_load_list)
 			if i["type"] == Barrier:
@@ -92,14 +94,23 @@ class LevelManager(CanvasObjects):
 				self.load_block(i, self.barrier_load_list)
 
 	def load_block(self, raw, final_list):
-		self.add_rows_columns(final_list,  raw["rows"], raw["columns"], raw["xcorner"], raw["ycorner"], raw["xspacing"], raw["yspacing"])
-		if raw["type"] == AlienTypeOne:
+		self.add_rows_columns(final_list, raw["rows"], raw["columns"], raw["xcorner"], raw["ycorner"], raw["xspacing"], raw["yspacing"])
+		if raw["type"] == Alien:
 			self.combine_movement(raw)
+			self.add_alien_info(raw)
+
 		self.create_block(raw["type"], final_list)
 
 	def combine_movement(self, raw):
 		for i in self.alien_load_list:
 			i.append(self.movement_pattern(raw["movement"]))
+
+	def add_alien_info(self, raw):
+		for i in self.alien_load_list:
+			if raw["id"] == "one":
+				i.append(self.a.one)
+			if raw["id"] == "two":
+				i.append(self.a.two)
 
 	def movement_pattern(self, raw_movement_data):
 		movement_list = []
@@ -121,12 +132,13 @@ class LevelManager(CanvasObjects):
 			index += 1 
 
 	def create_block(self, object_type, create_list):
-		if object_type is AlienTypeOne:
+		if object_type is Alien:
 			for i in create_list:
-				a = AlienTypeOne(i[0], i[1], i[2]) 
+				a = Alien(i[0], i[1], i[2], i[3]) 
 				self.total_aliens += 1
 				a.remove += self.aliens_left
 				self.create.fire(a)
+
 		if object_type is Barrier:
 			for i in create_list:
 				b = Barrier(i[0], i[1])
@@ -306,7 +318,7 @@ class Dude(GameObjects):
 
 		self.spawn_time = time.clock()
 
-		self.hit_list = [AlienTypeOne, Barrier]
+		self.hit_list = [Alien, Barrier]
 
 	# movement functions	
 	def left(self, event):
@@ -353,32 +365,35 @@ class Dude(GameObjects):
 	def update(self):
 		self.movement()
 
-class AlienTypeOne(GameObjects):
-	def __init__(self, x, y, movement_list):
-		super().__init__(35, 35, '/Users/carollin/Dev/space_invaders/graphics/alien1.png')
+class Alien(GameObjects):
+	def __init__(self, x, y, movement_list, type_list):
+		super().__init__(type_list[0], type_list[1], type_list[2])
 
 		self.x = x
 		self.y = y
 		self.dx = 0
 		self.dy = 0
-		self.horizontal_jump = 20
-		self.vertical_jump = 20
+		self.horizontal_jump = type_list[3]
+		self.vertical_jump = type_list[4]
 
-		self.laser_dx = 0
-		self.laser_dy = 6
-		self.laser_graphic = '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg'
-		self.laser_sound = '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg'
+		self.laser_dx = type_list[5]
+		self.laser_dy = type_list[6]
+		self.laser_graphic = type_list[7]
+		self.laser_sound = type_list[8]
+
+		self.move_wait = type_list[9]
+		self.shot_wait = type_list[10]
+		self.time_moved = 0
+
+		self.hit_points = type_list[11]
+
+		self.movement_list = movement_list
 
 		self.animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/alienexplosion.png'
 		self.animation_width = 320
 		self.animation_height = 40
 		self.num_sprites = 8
 
-		self.move_wait = 0.5
-		self.shot_wait = 400
-		self.time_moved = 0
-
-		self.movement_list = movement_list
 		self.hit_list = [Dude, Barrier]
 
 	# movement functions
@@ -522,58 +537,95 @@ class Animation(GameObjects):
 		else:
 			self.slide_image()
 
+class AlienTypes:
+	def __init__(self):
+
+		# (width, height, graphic, horizontal_move, vertical_move, laser_dx, laser_dy, laser_graphic, shoot_sound, move_wait, shot_wait, hit_points)
+
+		self.one = (35, 35, '/Users/carollin/Dev/space_invaders/graphics/alien1.png', 20, 20, 0, 6, '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0.5, 400, 10)
+		self.two = (30, 30, '/Users/carollin/Dev/space_invaders/graphics/alien2.png', 5, 5, 0, 10, '/Users/carollin/Dev/space_invaders/graphics/bluebeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0, 30, 20)
+
 class Levels:
 	def __init__(self):
 		self.data = [
 			[ 
 				{
 					"type": Dude
-				}, {
-					"type": AlienTypeOne,
-					"rows": 6,
-					"columns": 11,
-					"xcorner": 30,
-					"ycorner": 50,
+				}, 
+				# {
+			# 		"type": Alien,
+					# "id": "one",
+			# 		"rows": 5,
+			# 		"columns": 11,
+			# 		"xcorner": 30,
+			# 		"ycorner": 50,
+			# 		"xspacing": 40,
+			# 		"yspacing": 40,
+			# 		"movement": [
+			# 			("right", 15),
+			# 			("down", 1),
+			# 			("left", 15),
+			# 			("down", 1)
+			# 		]
+			# 	}, {
+			# 		"type": Barrier,
+			# 		"rows": 3,
+			# 		"columns": 6,
+			# 		"xcorner": 100,
+			# 		"ycorner": 450,
+			# 		"xspacing": 30,
+			# 		"yspacing": 20
+			# 	}, {
+			# 		"type": Barrier,
+			# 		"rows": 3,
+			# 		"columns": 6,
+			# 		"xcorner": 340,
+			# 		"ycorner": 450,
+			# 		"xspacing": 30,
+			# 		"yspacing": 20
+			# 	}, {
+			# 		"type": Barrier,
+			# 		"rows": 3,
+			# 		"columns": 6,
+			# 		"xcorner": 580,
+			# 		"ycorner": 450,
+			# 		"xspacing": 30,
+			# 		"yspacing": 20
+			# 	}
+			# ], [ 
+				{
+					"type": Alien,
+					"id": "two",
+					"rows": 1,
+					"columns": 1,
+					"xcorner": 25,
+					"ycorner": 40,
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
-						("right", 15),
-						("down", 1),
-						("left", 15),
-						("down", 1)
+						("right", 145),
+						("left", 145),
 					]
 				}, {
-					"type": Barrier,
-					"rows": 4,
-					"columns": 6,
-					"xcorner": 100,
-					"ycorner": 450,
-					"xspacing": 30,
-					"yspacing": 20
+					"type": Alien,
+					"id": "two",
+					"rows": 1,
+					"columns": 1,
+					"xcorner": 735,
+					"ycorner": 70,
+					"xspacing": 40,
+					"yspacing": 40,
+					"movement": [
+						("left", 145),
+						("right", 145),
+					] 
 				}, {
-					"type": Barrier,
+					"type": Alien,
+					"id": "one",
 					"rows": 4,
-					"columns": 6,
-					"xcorner": 340,
-					"ycorner": 450,
-					"xspacing": 30,
-					"yspacing": 20
-				}, {
-					"type": Barrier,
-					"rows": 4,
-					"columns": 6,
-					"xcorner": 580,
-					"ycorner": 450,
-					"xspacing": 30,
-					"yspacing": 20
-				}
-			], [ 
-				{
-					"type": AlienTypeOne,
-					"rows": 5,
 					"columns": 6,
 					"xcorner": 25,
-					"ycorner": 50,
+					"ycorner": 110,
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
@@ -583,11 +635,12 @@ class Levels:
 						("down", 1)	
 					]
 				}, {
-					"type": AlienTypeOne,
-					"rows": 5,
+					"type": Alien,
+					"id": "one",
+					"rows": 4,
 					"columns": 6,
 					"xcorner": 535,
-					"ycorner": 50,
+					"ycorner": 110,
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
