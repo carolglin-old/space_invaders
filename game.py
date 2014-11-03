@@ -41,6 +41,8 @@ class GameObjects(CanvasObjects):
 
 		self.graphic = self.image_convert(self.source, self.width, self.height)
 
+		self.flash = False
+
 		mix.init()
 
 		self.tag = "game_object"
@@ -52,10 +54,6 @@ class GameObjects(CanvasObjects):
 	def create_laser(self, x, y, dx, dy, hit_list, graphic):
 		l = Laser(x, y, dx, dy, hit_list, graphic)
 		self.create.fire(l)
-
-	def hit(self, laser):
-		self.remove.fire(self)
-		self.animate()
 
 	def animate(self):
 		a = Animation(self.x, self.y, self.animation_width, self.animation_height, self.animation_graphic, self.num_sprites)
@@ -111,6 +109,8 @@ class LevelManager(CanvasObjects):
 				i.append(self.a.one)
 			if raw["id"] == "two":
 				i.append(self.a.two)
+			if raw["id"] == "three":
+				i.append(self.a.three)
 
 	def movement_pattern(self, raw_movement_data):
 		movement_list = []
@@ -252,9 +252,13 @@ class Game(CanvasObjects):
 		self.canvas.delete("dude")
 		copy = self.update_list[:]
 		for obj in copy:
-			self.draw(self.canvas, obj.x, obj.y, obj.graphic, obj.tag)
+			if obj.flash is True:
+				pass 
+			else:
+				self.draw(self.canvas, obj.x, obj.y, obj.graphic, obj.tag)
 
 		self.canvas.update()
+
 
 	def update_model(self):
 		copy = self.update_list[:]
@@ -275,6 +279,10 @@ class Barrier(GameObjects):
 		self.animation_width = 250
 		self.animation_height = 46
 		self.num_sprites = 5
+
+	def hit(self, laser):
+		self.remove.fire(self)
+		self.animate()
 
 	def update(self):
 		pass
@@ -306,11 +314,15 @@ class Dude(GameObjects):
 		self.laser_dx = 0
 		self.laser_dy = -6
 		self.laser_sound = '/Users/carollin/Dev/space_invaders/sounds/dudelaser.ogg'
+		self.laser_strength = 10
 
 		self.animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/dudeexplosion.png'
 		self.animation_width = 1024
 		self.animation_height = 128
 		self.num_sprites = 20
+
+		self.flash = True
+		self.flash_iter = 1
 
 		self.shot_wait = 0.45
 		self.time_fired = 0
@@ -354,15 +366,26 @@ class Dude(GameObjects):
 		self.shooting = False
 
 	def hit(self, laser):
-		if self.invincible() is True:
+		if self.invincible() is False:
 			self.remove.fire(self)
 			self.animate()
 
+	def check_flash(self):
+		if self.invincible() == True:
+			if self.flash_iter % 3 == 0:
+				self.flash = True
+			else: 
+				self.flash = False
+			self.flash_iter += 1
+
 	def invincible(self):
-		if (time.clock() - self.spawn_time) > 3:
+		if (time.clock() - self.spawn_time) <= 3:
 			return True
+		else:
+			return False
 
 	def update(self):
+		self.check_flash()
 		self.movement()
 
 class Alien(GameObjects):
@@ -450,6 +473,12 @@ class Alien(GameObjects):
 	def randomize(self):
 		if random.randrange(self.shot_wait) == 1:
 			return "go"
+
+	def hit(self, laser):
+		self.hit_points -= 10
+		if self.hit_points <= 0:
+			self.remove.fire(self)
+			self.animate()
 
 	def update(self):
 		self.movement()
@@ -543,7 +572,8 @@ class AlienTypes:
 		# (width, height, graphic, horizontal_move, vertical_move, laser_dx, laser_dy, laser_graphic, shoot_sound, move_wait, shot_wait, hit_points)
 
 		self.one = (35, 35, '/Users/carollin/Dev/space_invaders/graphics/alien1.png', 20, 20, 0, 6, '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0.5, 400, 10)
-		self.two = (30, 30, '/Users/carollin/Dev/space_invaders/graphics/alien2.png', 5, 5, 0, 10, '/Users/carollin/Dev/space_invaders/graphics/bluebeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0, 30, 20)
+		self.two = (35, 35, '/Users/carollin/Dev/space_invaders/graphics/alien2.png', 20, 20, 0, 6, '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0.5, 300, 20)
+		self.three = (30, 30, '/Users/carollin/Dev/space_invaders/graphics/alien3.png', 5, 5, 0, 10, '/Users/carollin/Dev/space_invaders/graphics/bluebeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0, 30, 20)
 
 class Levels:
 	def __init__(self):
@@ -552,50 +582,65 @@ class Levels:
 				{
 					"type": Dude
 				}, 
-				# {
-			# 		"type": Alien,
-					# "id": "one",
-			# 		"rows": 5,
-			# 		"columns": 11,
-			# 		"xcorner": 30,
-			# 		"ycorner": 50,
-			# 		"xspacing": 40,
-			# 		"yspacing": 40,
-			# 		"movement": [
-			# 			("right", 15),
-			# 			("down", 1),
-			# 			("left", 15),
-			# 			("down", 1)
-			# 		]
-			# 	}, {
-			# 		"type": Barrier,
-			# 		"rows": 3,
-			# 		"columns": 6,
-			# 		"xcorner": 100,
-			# 		"ycorner": 450,
-			# 		"xspacing": 30,
-			# 		"yspacing": 20
-			# 	}, {
-			# 		"type": Barrier,
-			# 		"rows": 3,
-			# 		"columns": 6,
-			# 		"xcorner": 340,
-			# 		"ycorner": 450,
-			# 		"xspacing": 30,
-			# 		"yspacing": 20
-			# 	}, {
-			# 		"type": Barrier,
-			# 		"rows": 3,
-			# 		"columns": 6,
-			# 		"xcorner": 580,
-			# 		"ycorner": 450,
-			# 		"xspacing": 30,
-			# 		"yspacing": 20
-			# 	}
-			# ], [ 
 				{
 					"type": Alien,
 					"id": "two",
+					"rows": 2,
+					"columns": 11,
+					"xcorner": 30,
+					"ycorner": 50,
+					"xspacing": 40,
+					"yspacing": 40,
+					"movement": [
+						("right", 15),
+						("down", 1),
+						("left", 15),
+						("down", 1)
+					]
+				}, {
+					"type": Alien,
+					"id": "one",
+					"rows": 3,
+					"columns": 11,
+					"xcorner": 30,
+					"ycorner": 130,
+					"xspacing": 40,
+					"yspacing": 40,
+					"movement": [
+						("right", 15),
+						("down", 1),
+						("left", 15),
+						("down", 1)
+					]
+				}, {
+					"type": Barrier,
+					"rows": 3,
+					"columns": 6,
+					"xcorner": 100,
+					"ycorner": 450,
+					"xspacing": 30,
+					"yspacing": 20
+				}, {
+					"type": Barrier,
+					"rows": 3,
+					"columns": 6,
+					"xcorner": 340,
+					"ycorner": 450,
+					"xspacing": 30,
+					"yspacing": 20
+				}, {
+					"type": Barrier,
+					"rows": 3,
+					"columns": 6,
+					"xcorner": 580,
+					"ycorner": 450,
+					"xspacing": 30,
+					"yspacing": 20
+				}
+			], [ 
+				{
+					"type": Alien,
+					"id": "three",
 					"rows": 1,
 					"columns": 1,
 					"xcorner": 25,
@@ -608,7 +653,7 @@ class Levels:
 					]
 				}, {
 					"type": Alien,
-					"id": "two",
+					"id": "three",
 					"rows": 1,
 					"columns": 1,
 					"xcorner": 735,
@@ -621,8 +666,8 @@ class Levels:
 					] 
 				}, {
 					"type": Alien,
-					"id": "one",
-					"rows": 4,
+					"id": "two",
+					"rows": 2,
 					"columns": 6,
 					"xcorner": 25,
 					"ycorner": 110,
@@ -636,11 +681,41 @@ class Levels:
 					]
 				}, {
 					"type": Alien,
-					"id": "one",
-					"rows": 4,
+					"id": "two",
+					"rows": 2,
 					"columns": 6,
 					"xcorner": 535,
 					"ycorner": 110,
+					"xspacing": 40,
+					"yspacing": 40,
+					"movement": [
+						("left", 6),
+						("down", 1),
+						("right", 6),
+						("down", 1)	
+					]
+				}, {
+					"type": Alien,
+					"id": "one",
+					"rows": 2,
+					"columns": 6,
+					"xcorner": 25,
+					"ycorner": 190,
+					"xspacing": 40,
+					"yspacing": 40,
+					"movement": [
+						("right", 6),
+						("down", 1),
+						("left", 6),
+						("down", 1)	
+					]
+				}, {
+					"type": Alien,
+					"id": "one",
+					"rows": 2,
+					"columns": 6,
+					"xcorner": 535,
+					"ycorner": 190,
 					"xspacing": 40,
 					"yspacing": 40,
 					"movement": [
