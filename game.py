@@ -1,5 +1,5 @@
 from tkinter import *
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 import random
 import math
 import time
@@ -10,6 +10,8 @@ class CanvasObjects():
 	def __init__(self):
 		self.screen_width = 800
 		self.screen_height = 550
+
+		mix.init()
 
 	def image_convert(self, imagepath, width, height):
 		size = width, height
@@ -42,8 +44,6 @@ class GameObjects(CanvasObjects):
 		self.graphic = self.image_convert(self.source, self.width, self.height)
 
 		self.flash = False
-
-		mix.init()
 
 		self.tag = "game_object"
 
@@ -85,32 +85,32 @@ class LevelManager(CanvasObjects):
 			if i["type"] == Dude:
 				self.create_object(i["type"])
 			if i["type"] == Alien:
-				self.alien_load_list = []
-				self.load_block(i, self.alien_load_list)
+				self.alien_info_list = []
+				self.load_block(i, self.alien_info_list)
 			if i["type"] == Barrier:
-				self.barrier_load_list = []
-				self.load_block(i, self.barrier_load_list)
+				self.barrier_info_list = []
+				self.load_block(i, self.barrier_info_list)
 
-	def load_block(self, raw, final_list):
-		self.add_rows_columns(final_list, raw["rows"], raw["columns"], raw["xcorner"], raw["ycorner"], raw["xspacing"], raw["yspacing"])
+	def load_block(self, raw, info_list):
+		self.add_rows_columns(info_list, raw["rows"], raw["columns"], raw["xcorner"], raw["ycorner"], raw["xspacing"], raw["yspacing"])
 		if raw["type"] == Alien:
 			self.combine_movement(raw)
 			self.add_alien_info(raw)
 
-		self.create_block(raw["type"], final_list)
+		self.create_block(raw["type"], info_list)
 
 	def combine_movement(self, raw):
-		for i in self.alien_load_list:
-			i.append(self.movement_pattern(raw["movement"]))
+		for i in self.alien_info_list:
+			i['movement_list'] = self.movement_pattern(raw["movement"])
 
 	def add_alien_info(self, raw):
-		for i in self.alien_load_list:
+		for i in self.alien_info_list:
 			if raw["id"] == "one":
-				i.append(self.a.one)
+				i.update(self.a.one)
 			if raw["id"] == "two":
-				i.append(self.a.two)
+				i.update(self.a.two)
 			if raw["id"] == "three":
-				i.append(self.a.three)
+				i.update(self.a.three)
 
 	def movement_pattern(self, raw_movement_data):
 		movement_list = []
@@ -121,27 +121,28 @@ class LevelManager(CanvasObjects):
 				j += 1
 		return movement_list
 
-	def add_rows_columns(self, end_list, rows, columns, xcorner, ycorner, xspacing, yspacing):
+	def add_rows_columns(self, info_list, rows, columns, xcorner, ycorner, xspacing, yspacing):
 		index = 1
 		while index <= rows:
 			y_val = (index - 1) * yspacing + ycorner
 			for i in range(columns):
 				x_val = i * xspacing + xcorner
-				add = [x_val, y_val]
-				end_list.append(add)
+				# creates a list of individual dictionaries for each block
+				new_dict = {'x': x_val, 'y': y_val}
+				info_list.append(new_dict)
 			index += 1 
 
-	def create_block(self, object_type, create_list):
+	def create_block(self, object_type, info_list):
 		if object_type is Alien:
-			for i in create_list:
-				a = Alien(i[0], i[1], i[2], i[3]) 
+			for dictionary in info_list:
+				a = Alien(**dictionary) 
 				self.total_aliens += 1
 				a.remove += self.aliens_left
 				self.create.fire(a)
 
 		if object_type is Barrier:
-			for i in create_list:
-				b = Barrier(i[0], i[1])
+			for dictionary in info_list:
+				b = Barrier(**dictionary)
 				self.create.fire(b)
 
 	def create_object(self, object_type):
@@ -171,7 +172,6 @@ class Game(CanvasObjects):
 		w = Tk()
 
 		self.background = '/Users/carollin/Dev/space_invaders/graphics/background.png'
-		size = self.screen_width, self.screen_height
 
 		frame = Frame()
 
@@ -217,8 +217,6 @@ class Game(CanvasObjects):
 	def add_to_update_list(self, obj):
 		self.update_list.append(obj)
 		obj.remove += self.remove_object
-		# if hasattr(obj, "animate"):
-		# 	obj.animate += self.animate
 		if hasattr(obj, "create"):
 			obj.create += self.add_to_update_list
 
@@ -259,7 +257,6 @@ class Game(CanvasObjects):
 
 		self.canvas.update()
 
-
 	def update_model(self):
 		copy = self.update_list[:]
 		for obj in copy:
@@ -270,15 +267,15 @@ class Game(CanvasObjects):
 				obj.update()
 
 class Barrier(GameObjects):
-	def __init__(self, x, y):
+	def __init__(self, animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/barrierexplosion.png', animation_width = 250, animation_height = 46, num_sprites = 5, **kwargs):
 		super().__init__(30, 20, '/Users/carollin/Dev/space_invaders/graphics/barrier.jpg')
-		self.x = x
-		self.y = y
+		self.x = kwargs['x']
+		self.y = kwargs['y']
 
-		self.animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/barrierexplosion.png'
-		self.animation_width = 250
-		self.animation_height = 46
-		self.num_sprites = 5
+		self.animation_graphic = animation_graphic
+		self.animation_width = animation_width
+		self.animation_height = animation_height
+		self.num_sprites = num_sprites
 
 	def hit(self, laser):
 		self.remove.fire(self)
@@ -389,33 +386,33 @@ class Dude(GameObjects):
 		self.movement()
 
 class Alien(GameObjects):
-	def __init__(self, x, y, movement_list, type_list):
-		super().__init__(type_list[0], type_list[1], type_list[2])
+	def __init__(self, animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/alienexplosion.png', animation_width = 320, animation_height = 40, num_sprites = 20, **kwargs):
+		super().__init__(kwargs['width'], kwargs['height'], kwargs['graphic'])
 
-		self.x = x
-		self.y = y
+		self.x = kwargs['x']
+		self.y = kwargs['y']
 		self.dx = 0
 		self.dy = 0
-		self.horizontal_jump = type_list[3]
-		self.vertical_jump = type_list[4]
+		self.horizontal_jump = kwargs['h_move']
+		self.vertical_jump = kwargs['v_move']
 
-		self.laser_dx = type_list[5]
-		self.laser_dy = type_list[6]
-		self.laser_graphic = type_list[7]
-		self.laser_sound = type_list[8]
+		self.laser_dx = kwargs['laser_dx']
+		self.laser_dy = kwargs['laser_dy']
+		self.laser_graphic = kwargs['laser_graphic']
+		self.laser_sound = kwargs['laser_sound']
 
-		self.move_wait = type_list[9]
-		self.shot_wait = type_list[10]
+		self.move_wait = kwargs['move_wait']
+		self.shot_wait = kwargs['shot_wait']
 		self.time_moved = 0
 
-		self.hit_points = type_list[11]
+		self.hit_points = kwargs['hit_points']
 
-		self.movement_list = movement_list
+		self.movement_list = kwargs['movement_list']
 
-		self.animation_graphic = '/Users/carollin/Dev/space_invaders/graphics/alienexplosion.png'
-		self.animation_width = 320
-		self.animation_height = 40
-		self.num_sprites = 8
+		self.animation_graphic = animation_graphic
+		self.animation_width = animation_width
+		self.animation_height = animation_height
+		self.num_sprites = num_sprites
 
 		self.hit_list = [Dude, Barrier]
 
@@ -568,12 +565,48 @@ class Animation(GameObjects):
 
 class AlienTypes:
 	def __init__(self):
-
-		# (width, height, graphic, horizontal_move, vertical_move, laser_dx, laser_dy, laser_graphic, shoot_sound, move_wait, shot_wait, hit_points)
-
-		self.one = (35, 35, '/Users/carollin/Dev/space_invaders/graphics/alien1.png', 20, 20, 0, 6, '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0.5, 400, 10)
-		self.two = (35, 35, '/Users/carollin/Dev/space_invaders/graphics/alien2.png', 20, 20, 0, 6, '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0.5, 300, 20)
-		self.three = (30, 30, '/Users/carollin/Dev/space_invaders/graphics/alien3.png', 5, 5, 0, 10, '/Users/carollin/Dev/space_invaders/graphics/bluebeam.jpg', '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 0, 30, 20)
+		self.one = {
+			'width': 35, 
+			'height': 35, 
+			'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien1.png', 
+			'h_move': 20, 
+			'v_move': 20, 
+			'laser_dx': 0, 
+			'laser_dy': 6, 
+			'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg', 
+			'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+			'move_wait': 0.5, 
+			'shot_wait': 400, 
+			'hit_points': 10
+		}
+		self.two = {
+			'width': 35, 
+			'height': 35, 
+			'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien2.png', 
+			'h_move': 20, 
+			'v_move': 20, 
+			'laser_dx': 0, 
+			'laser_dy': 6, 
+			'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/greenbeam.jpg', 
+			'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+			'move_wait': 0.5, 
+			'shot_wait': 300, 
+			'hit_points': 20
+		}
+		self.three = {
+			'width': 30, 
+			'height': 30, 
+			'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien3.png', 
+			'h_move': 5, 
+			'v_move': 5, 
+			'laser_dx': 0, 
+			'laser_dy': 10, 
+			'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/bluebeam.jpg', 
+			'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+			'move_wait': 0, 
+			'shot_wait': 30, 
+			'hit_points': 30
+		}
 
 class Levels:
 	def __init__(self):
