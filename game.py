@@ -1,6 +1,8 @@
 import pygame as pg
 import time
 import pdb
+import random
+import math
 
 '''
 Global constants
@@ -58,9 +60,88 @@ class GameObjects(CanvasObjects):
 		if time.clock() > fire_time + wait_time:
 			return True
 
+	def create_laser(self, x, y, dx, dy, graphic):
+		l = Laser(x, y, dx, dy, graphic)
+		self.create.fire(l)
+
 class LevelManager(CanvasObjects, pg.sprite.Sprite):
 	def __init__(self):
 		super().__init__()
+
+		self.levels = Levels()
+		self.current = 0
+
+		self.a = AlienTypes()
+
+		self.create = EventHook()
+
+	def init_level(self, current_level):
+		self.current_level = self.levels.data[self.current]
+		self.load_level(self.current_level)
+
+	def load_level(self, current_level):
+		for i in current_level:
+			if i["type"] == Alien:
+				self.alien_info_list = []
+				self.load_block(i, self.alien_info_list)
+			if i["type"] == Barrier:
+				self.barrier_info_list = []
+				self.load_block(i, self.barrier_info_list)
+
+	def load_block(self, raw, info_list):
+		# take raw layout data into a list of dictionaries for each item
+		self.add_rows_columns(info_list, raw["rows"], raw["columns"], raw["xcorner"], raw["ycorner"], raw["xspacing"], raw["yspacing"])
+		if raw["type"] == Alien:
+			self.combine_movement(raw)
+			self.add_alien_info(raw)
+
+		self.create_block(raw["type"], info_list)
+
+	def combine_movement(self, raw):
+		for i in self.alien_info_list:
+			i['movement_list'] = self.movement_pattern(raw["movement"])
+
+	def add_rows_columns(self, info_list, rows, columns, xcorner, ycorner, xspacing, yspacing):
+		index = 1
+		while index <= rows:
+			y_val = (index - 1) * yspacing + ycorner
+			for i in range(columns):
+				x_val = i * xspacing + xcorner
+				# creates a list of individual dictionaries for each block
+				new_dict = {'x': x_val, 'y': y_val}
+				info_list.append(new_dict)
+			index += 1
+
+	def movement_pattern(self, raw_movement_data):
+		# add alien movement pattern to each dictionary
+		movement_list = []
+		for i in raw_movement_data:
+			j = 0
+			while j < i[1]:
+				movement_list.append(i[0])
+				j += 1
+		return movement_list
+
+	def add_alien_info(self, raw):
+		# adding additional alien information to the dictionary depending on what type it is
+		for i in self.alien_info_list:
+			if raw["id"] == "one":
+				i.update(self.a.one)
+			if raw["id"] == "two":
+				i.update(self.a.two)
+			if raw["id"] == "three":
+				i.update(self.a.three)
+
+	def create_block(self, object_type, info_list):
+		if object_type is Alien:
+			for dictionary in info_list:
+				a = Alien(**dictionary)
+				self.create.fire(a)
+
+		if object_type is Barrier:
+			for dictionary in info_list:
+				b = Barrier(**dictionary)
+				self.create.fire(b)
 
 class Game(CanvasObjects, pg.sprite.Sprite):
 	def __init__(self):
@@ -74,7 +155,7 @@ class Game(CanvasObjects, pg.sprite.Sprite):
 
 		pg.display.set_caption(self.caption)
 
-		self.isStopped = False
+		self.isStopped = True
 
 		self.clock = pg.time.Clock()
 		self.sleepTime = 100
@@ -90,31 +171,65 @@ class Game(CanvasObjects, pg.sprite.Sprite):
 
 		self.update_list = pg.sprite.Group()
 
+		self.level_manager = LevelManager()
+		self.level_manager.create += self.add_to_list
+
+		self.keys = pg.key.get_pressed()
+		self.last_keys_pressed = self.keys
+
 		self.start()
 
 	def start(self):
-		self.dude = Dude()
-		self.update_list.add(self.dude)
+		self.isStopped = False
+		self.create_dude()
+		self.level_manager.init_level(self.level_manager.current)
 		self.mainloop()
+
+	def create_dude(self):
+		self.dude = Dude()
+		self.add_to_list(self.dude)
+
+	def add_to_list(self, obj):
+		self.update_list.add(obj)
+		if hasattr(obj, "create"):
+			obj.create += self.add_to_list
+		if type(obj) is Alien:
+			self.alien_list.add(obj)
+		if type(obj) is Laser:
+			self.laser_list.add(obj)
 
 	def mainloop(self):
 		while self.isStopped is False:
 
-			self.keypress_listener()
+			self.key_events()
 			self.update_model()
 			self.refresh_view()
 
 			self.clock.tick(self.sleepTime)
 
-	def keypress_listener(self):
+	def key_events(self):
 		for event in pg.event.get():
-			keys = pg.key.get_pressed()
-			if keys[pg.K_a]:
+			self.last_keys_pressed = self.keys
+			self.keys = pg.key.get_pressed()
+			if self.keys[pg.K_a]:
 				self.dude.left()
-			if keys[pg.K_d]:
+			if self.keys[pg.K_d]:
 				self.dude.right()
-			if event.type == pg.QUIT or keys[pg.K_ESCAPE]:
+			if self.keys[pg.K_SPACE]:
+				self.dude.shoot()
+			if self.keyrelease_listener(pg.K_a) is True:
+				self.dude.reset_movement()
+			if self.keyrelease_listener(pg.K_d) is True:
+				self.dude.reset_movement()
+			if self.keyrelease_listener(pg.K_SPACE) is True:
+				self.dude.shooting = False
+			if event.type == pg.QUIT or self.keys[pg.K_ESCAPE]:
 				self.isStopped = True
+
+	def keyrelease_listener(self, key_code):
+		if self.last_keys_pressed[key_code] and not self.keys[key_code]:
+			return True
+		return False
 
 	def update_model(self): 
 		for obj in self.update_list:
@@ -136,7 +251,17 @@ class Dude(GameObjects, pg.sprite.Sprite):
 
 		self.movement_speed = 5
 
+		self.laser_graphic = '/Users/carollin/Dev/space_invaders/graphics/redlaser.png'
+		self.laser_dx = 0
+		self.laser_dy = -6
+		self.laser_sound = '/Users/carollin/Dev/space_invaders/sounds/dudelaser.ogg'
+		self.laser_strength = 10
+
 		self.shooting = False
+		self.time_fired = 0
+		self.shot_wait = 0.45
+
+		self.spawn_time = time.clock()
 
 	def left(self):
 		self.dx = self.movement_speed * -1
@@ -144,7 +269,7 @@ class Dude(GameObjects, pg.sprite.Sprite):
 	def right(self):
 		self.dx = self.movement_speed
 
-	def reset_movement(self, event):
+	def reset_movement(self):
 		self.dx = 0
 
 	def movement(self):
@@ -158,17 +283,27 @@ class Dude(GameObjects, pg.sprite.Sprite):
 		if self.x < 0:
 			self.x = SCREEN_WIDTH - 5
 
+	def shoot(self):
+		self.shooting = True
+		if self.wait_time(self.time_fired, self.shot_wait) is True:
+			mid_x = self.x + (self.width / 2)
+			self.create_laser(mid_x, self.y, self.laser_dx, self.laser_dy, self.laser_graphic)
+			self.time_fired = time.clock()
+
+	def stop_shooting(self):
+		self.shooting = False
+
 	def update(self):
 		self.movement()
 		self.move_rect()
+		if self.shooting is True:
+			self.shoot()
 
 class Alien(GameObjects, pg.sprite.Sprite):
 	def __init__(self, **kwargs):
-		GameObjects.__init__(self, kwargs['width'], kwargs['height'], kwargs['graphic'])
+		GameObjects.__init__(self, kwargs['width'], kwargs['height'], kwargs['x'], kwargs['y'], kwargs['graphic'])
 		pg.sprite.Sprite.__init__(self)
 
-		self.x = kwargs['x']
-		self.y = kwargs['y']
 		self.dx = 0
 		self.dy = 0
 		self.horizontal_jump = kwargs['h_move']
@@ -228,9 +363,47 @@ class Alien(GameObjects, pg.sprite.Sprite):
 		self.movement_list.append(self.movement_list[0])
 		self.movement_list.pop(0)
 
+	def attempt_shot(self):
+		if self.randomize() == "go":
+			mid_x = self.x + (self.width / 2)
+			self.create_laser(mid_x, self.y, self.laser_dx, self.laser_dy, self.laser_graphic)
+
+	def randomize(self):
+		if random.randrange(self.shot_wait) == 1:
+			return "go"
+
+	def update(self):
+		self.attempt_shot()
+		self.movement()
+		self.move_rect()
+
+class Laser(GameObjects, pg.sprite.Sprite):
+	def __init__(self, x, y, dx, dy, graphic = '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png'):
+		GameObjects.__init__(self, 3, 15, x, y, graphic)
+		pg.sprite.Sprite.__init__(self)
+
+		self.dx = dx
+		self.dy = dy
+
+	def movement(self):
+		self.x += self.dx
+		self.y += self.dy
+
+	def check_if_active(self):
+		if self.y > SCREEN_HEIGHT or self.y < 0:
+			self.remove.fire(self)
+
 	def update(self):
 		self.movement()
 		self.move_rect()
+
+class Barrier(GameObjects, pg.sprite.Sprite):
+	def __init__(self, **kwargs):
+		GameObjects.__init__(self, 30, 20, kwargs['x'], kwargs['y'], '/Users/carollin/Dev/space_invaders/graphics/barrier.jpg')
+		pg.sprite.Sprite.__init__(self)
+
+	def update(self):
+		pass
 
 class EventHook(object):
     def __init__(self):
@@ -252,6 +425,226 @@ class EventHook(object):
         for theHandler in self.__handlers:
             if theHandler.im_self == inObject:
                 self -= theHandler
+
+class AlienTypes:
+    def __init__(self):
+        self.one = {
+            'width': 25, 
+            'height': 20, 
+            'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien1.png', 
+            'h_move': 20, 
+            'v_move': 20, 
+            'laser_dx': 0, 
+            'laser_dy': 6, 
+            'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png', 
+            'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+            'move_wait': 0.5, 
+            'shot_wait': 400, 
+            'hit_points': 20
+        }
+        self.two = {
+            'width': 25, 
+            'height': 20, 
+            'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien2.png', 
+            'h_move': 20, 
+            'v_move': 20, 
+            'laser_dx': 0, 
+            'laser_dy': 6, 
+            'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png', 
+            'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+            'move_wait': 0.5, 
+            'shot_wait': 300, 
+            'hit_points': 20
+        }
+        self.three = {
+            'width': 25, 
+            'height': 20, 
+            'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien3.png', 
+            'h_move': 5, 
+            'v_move': 5, 
+            'laser_dx': 0, 
+            'laser_dy': 10, 
+            'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png', 
+            'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+            'move_wait': 0, 
+            'shot_wait': 30, 
+            'hit_points': 30
+        }
+
+class Levels:
+    def __init__(self):
+        self.data = [
+            [  
+                {
+                    "type": Alien,
+                    "id": "two",
+                    "rows": 2,
+                    "columns": 11,
+                    "xcorner": 30,
+                    "ycorner": 50,
+                    "xspacing": 40,
+                    "yspacing": 40,
+                    "movement": [
+                        ("right", 15),
+                        ("down", 1),
+                        ("left", 15),
+                        ("down", 1)
+                    ]
+                }, {
+                    "type": Alien,
+                    "id": "one",
+                    "rows": 3,
+                    "columns": 11,
+                    "xcorner": 30,
+                    "ycorner": 130,
+                    "xspacing": 40,
+                    "yspacing": 40,
+                    "movement": [
+                        ("right", 15),
+                        ("down", 1),
+                        ("left", 15),
+                        ("down", 1)
+                    ]
+                }, {
+                    "type": Barrier,
+                    "rows": 3,
+                    "columns": 6,
+                    "xcorner": 100,
+                    "ycorner": 450,
+                    "xspacing": 30,
+                    "yspacing": 20
+                }, {
+                    "type": Barrier,
+                    "rows": 3,
+                    "columns": 6,
+                    "xcorner": 340,
+                    "ycorner": 450,
+                    "xspacing": 30,
+                    "yspacing": 20
+                }, {
+                    "type": Barrier,
+                    "rows": 3,
+                    "columns": 6,
+                    "xcorner": 580,
+                    "ycorner": 450,
+                    "xspacing": 30,
+                    "yspacing": 20
+                }
+            ], [ 
+                {
+                    "type": Alien,
+                    "id": "three",
+                    "rows": 1,
+                    "columns": 1,
+                    "xcorner": 25,
+                    "ycorner": 40,
+                    "xspacing": 40,
+                    "yspacing": 40,
+                    "movement": [
+                        ("right", 145),
+                        ("left", 145),
+                    ]
+                }, {
+                    "type": Alien,
+                    "id": "three",
+                    "rows": 1,
+                    "columns": 1,
+                    "xcorner": 735,
+                    "ycorner": 70,
+                    "xspacing": 40,
+                    "yspacing": 40,
+                    "movement": [
+                        ("left", 145),
+                        ("right", 145),
+                    ] 
+                }, {
+                    "type": Alien,
+                    "id": "two",
+                    "rows": 2,
+                    "columns": 6,
+                    "xcorner": 25,
+                    "ycorner": 110,
+                    "xspacing": 40,
+                    "yspacing": 40,
+                    "movement": [
+                        ("right", 6),
+                        ("down", 1),
+                        ("left", 6),
+                        ("down", 1) 
+                    ]
+                }, {
+                    "type": Alien,
+                    "id": "two",
+                    "rows": 2,
+                    "columns": 6,
+                    "xcorner": 535,
+                    "ycorner": 110,
+                    "xspacing": 40,
+                    "yspacing": 40,
+                    "movement": [
+                        ("left", 6),
+                        ("down", 1),
+                        ("right", 6),
+                        ("down", 1) 
+                    ]
+                }, {
+                    "type": Alien,
+                    "id": "one",
+                    "rows": 2,
+                    "columns": 6,
+                    "xcorner": 25,
+                    "ycorner": 190,
+                    "xspacing": 40,
+                    "yspacing": 40,
+                    "movement": [
+                        ("right", 6),
+                        ("down", 1),
+                        ("left", 6),
+                        ("down", 1) 
+                    ]
+                }, {
+                    "type": Alien,
+                    "id": "one",
+                    "rows": 2,
+                    "columns": 6,
+                    "xcorner": 535,
+                    "ycorner": 190,
+                    "xspacing": 40,
+                    "yspacing": 40,
+                    "movement": [
+                        ("left", 6),
+                        ("down", 1),
+                        ("right", 6),
+                        ("down", 1) 
+                    ]
+                }, {
+                    "type": Barrier,
+                    "rows": 3,
+                    "columns": 6,
+                    "xcorner": 100,
+                    "ycorner": 450,
+                    "xspacing": 30,
+                    "yspacing": 20
+                }, {
+                    "type": Barrier,
+                    "rows": 3,
+                    "columns": 6,
+                    "xcorner": 340,
+                    "ycorner": 450,
+                    "xspacing": 30,
+                    "yspacing": 20
+                }, {
+                    "type": Barrier,
+                    "rows": 3,
+                    "columns": 6,
+                    "xcorner": 580,
+                    "ycorner": 450,
+                    "xspacing": 30,
+                    "yspacing": 20
+                }
+            ]       
+        ]
+
 
 Game()
 
