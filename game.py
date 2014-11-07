@@ -60,8 +60,8 @@ class GameObjects(CanvasObjects):
 		if time.clock() > fire_time + wait_time:
 			return True
 
-	def create_laser(self, x, y, dx, dy, graphic):
-		l = Laser(x, y, dx, dy, graphic)
+	def create_laser(self, x, y, dx, dy, origin, graphic):
+		l = Laser(x, y, dx, dy, origin, graphic)
 		self.create.fire(l)
 
 class LevelManager(CanvasObjects, pg.sprite.Sprite):
@@ -74,6 +74,7 @@ class LevelManager(CanvasObjects, pg.sprite.Sprite):
 		self.a = AlienTypes()
 
 		self.create = EventHook()
+		self.clear = EventHook()
 
 	def init_level(self, current_level):
 		self.current_level = self.levels.data[self.current]
@@ -149,39 +150,48 @@ class Game(CanvasObjects, pg.sprite.Sprite):
 
 		pg.init()
 
+		self.isStopped = True
+
+		self.lives = 3
+
+		self.clock = pg.time.Clock()
+		self.sleepTime = 100
+
+		self.alien_group = pg.sprite.Group()	
+		self.barrier_group = pg.sprite.Group()
+		self.dude_group = pg.sprite.GroupSingle()
+		self.alien_laser_group = pg.sprite.Group()
+		self.dude_laser_group = pg.sprite.Group()
+		self.update_list = pg.sprite.Group()
+
+		self.level_manager = LevelManager()
+		self.level_manager.create += self.add_to_list
+		self.level_manager.clear += self.next_level
+
+		self.total_aliens = 0
+
+		self.keys = pg.key.get_pressed()
+		self.last_keys_pressed = self.keys
+
+		self.load_screen()
+
+	def load_screen(self):
 		self.size = (SCREEN_WIDTH, SCREEN_HEIGHT)
 		self.screen = pg.display.set_mode(self.size)
 		self.caption = '<(^.^<) Space Invaders! (>O.O)>'
 
 		pg.display.set_caption(self.caption)
 
-		self.isStopped = True
-
-		self.clock = pg.time.Clock()
-		self.sleepTime = 100
-
 		self.bg_file = '/Users/carollin/Dev/space_invaders/graphics/background.png'
 
 		self.background = self.open_resize_img(self.bg_file, SCREEN_WIDTH, SCREEN_HEIGHT)
 		self.screen.blit(self.background, [0, 0])
 
-		self.alien_list = pg.sprite.Group()	
-		self.laser_list = pg.sprite.Group()
-		self.barrier_list = pg.sprite.Group()
-
-		self.update_list = pg.sprite.Group()
-
-		self.level_manager = LevelManager()
-		self.level_manager.create += self.add_to_list
-
-		self.keys = pg.key.get_pressed()
-		self.last_keys_pressed = self.keys
-
+		self.create_dude()
 		self.start()
 
 	def start(self):
 		self.isStopped = False
-		self.create_dude()
 		self.level_manager.init_level(self.level_manager.current)
 		self.mainloop()
 
@@ -191,12 +201,53 @@ class Game(CanvasObjects, pg.sprite.Sprite):
 
 	def add_to_list(self, obj):
 		self.update_list.add(obj)
+		obj.remove += self.remove_object
 		if hasattr(obj, "create"):
 			obj.create += self.add_to_list
+		if type(obj) is Dude:
+			self.dude_group.add(obj)
 		if type(obj) is Alien:
-			self.alien_list.add(obj)
+			self.total_aliens += 1
+			self.alien_group.add(obj)
+		if type(obj) is Barrier:
+			self.barrier_group.add(obj)
 		if type(obj) is Laser:
-			self.laser_list.add(obj)
+			if obj.origin == "dude":
+				self.dude_laser_group.add(obj)
+			if obj.origin == "alien":
+				self.alien_laser_group.add(obj)
+
+	def remove_object(self, obj):
+		if type(obj) is Dude:
+			self.check_lives()
+		if type(obj) is Alien:
+			self.check_aliens()
+
+		obj.kill()
+
+	def next_level(self):
+		self.isStopped = True
+		self.level_manager.current += 1
+		self.reset_groups()
+		self.start()
+
+	def reset_groups(self):
+		self.alien_group.empty()
+		self.alien_laser_group.empty()
+		self.barrier_group.empty()
+		self.dude_laser_group.empty()
+
+	def check_lives(self):
+		self.lives -= 1
+		if self.lives > 0:
+			self.create_dude()
+		else:
+			self.isStopped = True
+
+	def check_aliens(self):
+		self.total_aliens -= 1
+		if self.total_aliens == 0:
+			self.next_level()
 
 	def mainloop(self):
 		while self.isStopped is False:
@@ -233,7 +284,10 @@ class Game(CanvasObjects, pg.sprite.Sprite):
 
 	def update_model(self): 
 		for obj in self.update_list:
-			obj.update()
+			if type(obj) is Laser:
+				obj.update(self.alien_group, self.barrier_group, self.dude_group)
+			else:
+				obj.update()
 
 	def refresh_view(self):
 		self.update_list.clear(self.screen, self.background)
@@ -287,11 +341,21 @@ class Dude(GameObjects, pg.sprite.Sprite):
 		self.shooting = True
 		if self.wait_time(self.time_fired, self.shot_wait) is True:
 			mid_x = self.x + (self.width / 2)
-			self.create_laser(mid_x, self.y, self.laser_dx, self.laser_dy, self.laser_graphic)
+			self.create_laser(mid_x, self.y, self.laser_dx, self.laser_dy, "dude", self.laser_graphic)
 			self.time_fired = time.clock()
 
 	def stop_shooting(self):
 		self.shooting = False
+
+	def hit(self):
+		if self.invincible() is False:
+			self.remove.fire(self)
+
+	def invincible(self):
+		if (time.clock() - self.spawn_time) <= 3:
+			return True
+		else:
+			return False
 
 	def update(self):
 		self.movement()
@@ -366,7 +430,7 @@ class Alien(GameObjects, pg.sprite.Sprite):
 	def attempt_shot(self):
 		if self.randomize() == "go":
 			mid_x = self.x + (self.width / 2)
-			self.create_laser(mid_x, self.y, self.laser_dx, self.laser_dy, self.laser_graphic)
+			self.create_laser(mid_x, self.y, self.laser_dx, self.laser_dy, "alien", self.laser_graphic)
 
 	def randomize(self):
 		if random.randrange(self.shot_wait) == 1:
@@ -378,12 +442,14 @@ class Alien(GameObjects, pg.sprite.Sprite):
 		self.move_rect()
 
 class Laser(GameObjects, pg.sprite.Sprite):
-	def __init__(self, x, y, dx, dy, graphic = '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png'):
+	def __init__(self, x, y, dx, dy, origin, graphic = '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png'):
 		GameObjects.__init__(self, 3, 15, x, y, graphic)
 		pg.sprite.Sprite.__init__(self)
 
 		self.dx = dx
 		self.dy = dy
+
+		self.origin = origin
 
 	def movement(self):
 		self.x += self.dx
@@ -393,9 +459,48 @@ class Laser(GameObjects, pg.sprite.Sprite):
 		if self.y > SCREEN_HEIGHT or self.y < 0:
 			self.remove.fire(self)
 
-	def update(self):
+	def check_objects(self, alien_group, barrier_group, dude_group):
+		if self.origin == "dude":
+			alien_hit = pg.sprite.spritecollide(self, alien_group, False)
+			barrier_hit = pg.sprite.spritecollide(self, barrier_group, False)
+
+			if len(alien_hit) != 0:
+				self.remove.fire(alien_hit[0])
+				self.remove.fire(self)
+			if len(barrier_hit) != 0:
+				self.remove.fire(barrier_hit[0])
+				self.remove.fire(self)
+
+		if self.origin == "alien":
+			barrier_hit = pg.sprite.spritecollide(self, barrier_group, False)
+			dude_hit = pg.sprite.spritecollide(self, dude_group, False)
+
+			if len(barrier_hit) != 0:
+				self.remove.fire(barrier_hit[0])
+				self.remove.fire(self)
+			if len(dude_hit) != 0:
+				dude_hit[0].hit()
+				self.remove.fire(self)
+
+	# def collision_detect_list(self, sprite_list):
+	# 	for i in sprite_list:
+	# 		if self.rect.colliderect(i.rect) is True:
+	# 			self.remove.fire(i)
+
+	# def collision_detect_object(self, obj):
+	# 	if self.rect.colliderect(obj):
+	# 		self.remove.fire(obj)
+
+	# def create_rect_list(self, sprite_list):
+	# 	rect_list = []
+	# 	for i in sprite_list:
+	# 		rect_list.append(i.rect)
+	# 	return rect_list
+
+	def update(self, alien_group, barrier_group, dude_group):
 		self.movement()
 		self.move_rect()
+		self.check_objects(alien_group, barrier_group, dude_group)
 
 class Barrier(GameObjects, pg.sprite.Sprite):
 	def __init__(self, **kwargs):
