@@ -1,34 +1,44 @@
-from tkinter import Frame, Tk, Label, Button
-from PIL import Image, ImageTk, ImageFilter
-
-class Application(Frame):
-	def __init__(self, master=None):
-		Frame.__init__(self, master)
-		master.wm_title("Image examples")
-		self.pack()
-		self.createWidgets()
-
-	def createWidgets(self):
-		self.img = Image.open('/Users/carollin/Dev/space_invaders/graphics/dude.png')
-		self.photo1 = ImageTk.PhotoImage(self.img.convert("RGB"))
-		self.label1 = Label(self, image=self.photo1)
-		self.label1.grid(row=0, column=0)
-
-		self.photo2 = ImageTk.PhotoImage(self.img.convert("RGB"))
-		self.label2 = Label(self, image=self.photo2)
-		self.label2.grid(row=0, column=1)
-
-		button = Button(self, text="Brighten", command=self.brighten)
-		button.grid(row=0, column=2)
-
-	def brighten(self):
-		img2 = self.img.point(lambda p: p * 0.3)
-		# img2.show()
-		self.photo2 = ImageTk.PhotoImage(img2)
-		self.label2 = Label(self, image=self.photo2)
-		self.label2.grid(row=0, column=1)
-
-root = Tk()
-app = Application(master=root)
-app.mainloop()
-root.destroy()
+class AlienTypes:
+    def __init__(self):
+        self.one = {
+            'width': 25, 
+            'height': 20, 
+            'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien1.png', 
+            'h_move': 20, 
+            'v_move': 20, 
+            'laser_dx': 0, 
+            'laser_dy': 6, 
+            'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png', 
+            'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+            'move_wait': 0.5, 
+            'shot_wait': 400, 
+            'hit_points': 20
+        }
+        self.two = {
+            'width': 25, 
+            'height': 20, 
+            'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien2.png', 
+            'h_move': 20, 
+            'v_move': 20, 
+            'laser_dx': 0, 
+            'laser_dy': 6, 
+            'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png', 
+            'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+            'move_wait': 0.5, 
+            'shot_wait': 300, 
+            'hit_points': 20
+        }
+        self.three = {
+            'width': 25, 
+            'height': 20, 
+            'graphic': '/Users/carollin/Dev/space_invaders/graphics/alien3.png', 
+            'h_move': 5, 
+            'v_move': 5, 
+            'laser_dx': 0, 
+            'laser_dy': 10, 
+            'laser_graphic': '/Users/carollin/Dev/space_invaders/graphics/greenlaser.png', 
+            'laser_sound': '/Users/carollin/Dev/space_invaders/sounds/alienlaser.ogg', 
+            'move_wait': 0, 
+            'shot_wait': 30, 
+            'hit_points': 30
+        }
