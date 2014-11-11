@@ -108,3 +108,4 @@ class Spritesheet(object):
         return self.images_at(tups, colorkey)
 
 Game()
+
