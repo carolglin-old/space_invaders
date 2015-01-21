@@ -506,7 +506,7 @@ class Game(CanvasObjects, pg.sprite.Sprite):
 	def try_special_object(self, obj):
 		if self.level_manager.current == 1:
 			if self.dude.movement_speed == 5:
-				self.randomize_power_up(600, obj)
+				self.randomize_power_up(200, obj)
 		if self.level_manager.current == 2:
 			if self.dude.movement_speed == 5:
 				self.randomize_power_up(100, obj)
